@@ -375,7 +375,9 @@
 		<module>../SpaceExParser</module>
 		<module>../SyntaxChecker</module>
 		<module>../TraceAbstraction</module>
+		<module>../TraceAbstractionWithHL</module>
 		<module>../TraceAbstractionWithAFAs</module>
+		<module>../TraceAbstractionEmpty</module>
 		<module>../TreeAutomizer</module>
 		<module>../UltimateCLI</module>
 		<module>../UltimateDeltaDebugger</module>

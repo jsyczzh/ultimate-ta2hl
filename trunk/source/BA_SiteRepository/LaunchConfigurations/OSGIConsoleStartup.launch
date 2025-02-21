@@ -67,6 +67,7 @@
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.pea.test@default:false"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.pea@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.preferencejson@default:default"/>
+        <setEntry value="de.uni_freiburg.informatik.ultimate.lib.proofs@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.sifa.test@default:false"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.sifa@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.lib.smtlib.test@default:false"/>
@@ -101,13 +102,14 @@
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.buchiautomizer@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.cacsl2boogietranslator@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.codecheck@default:default"/>
+        <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.icfgbuilder@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.invariantsynthesis@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.modsetannotator@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.rcfgbuilder@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.referee@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstraction@default:default"/>
-        <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionconcurrent@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithafas@default:default"/>
+        <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.generator.treeautomizer@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.icfgtochc@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.icfgtransformation@default:default"/>
@@ -116,7 +118,6 @@
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.source.automatascriptparser@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.spaceex.parser.test@default:false"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.plugins.spaceex.parser@default:default"/>
-        <setEntry value="de.uni_freiburg.informatik.ultimate.regressiontest@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.req.printer@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.reqparser@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.reqtotest@default:default"/>
@@ -126,13 +127,12 @@
         <setEntry value="de.uni_freiburg.informatik.ultimate.smtsolver.external.test@default:false"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.smtsolver.external@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.source.smtparser@default:default"/>
-        <setEntry value="de.uni_freiburg.informatik.ultimate.ultimatetest@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.web.backend@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.witnessparser@default:default"/>
         <setEntry value="de.uni_freiburg.informatik.ultimate.witnessprinter@default:default"/>
+        <setEntry value="edu.uci.ics.jung@default:default"/>
         <setEntry value="net.sourceforge.czt@default:default"/>
         <setEntry value="org.apache.commons.cli@default:default"/>
-        <setEntry value="org.apache.commons.lang3@default:default"/>
     </setAttribute>
     <booleanAttribute key="show_selected_only" value="false"/>
     <booleanAttribute key="tracing" value="false"/>

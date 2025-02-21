@@ -1,0 +1,569 @@
+/*
+ * Copyright (C) 2013-2015 Daniel Dietsch (dietsch@informatik.uni-freiburg.de)
+ * Copyright (C) 2012-2015 Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
+ * Copyright (C) 2015 University of Freiburg
+ *
+ * This file is part of the ULTIMATE TraceAbstraction plug-in.
+ *
+ * The ULTIMATE TraceAbstraction plug-in is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * The ULTIMATE TraceAbstraction plug-in is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with the ULTIMATE TraceAbstraction plug-in. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Additional permission under GNU GPL version 3 section 7:
+ * If you modify the ULTIMATE TraceAbstraction plug-in, or any covered work, by linking
+ * or combining it with Eclipse RCP (or a modified version of Eclipse RCP),
+ * containing parts covered by the terms of the Eclipse Public License, the
+ * licensors of the ULTIMATE TraceAbstraction plug-in grant you additional permission
+ * to convey the resulting work.
+ */
+package de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences;
+
+import de.uni_freiburg.informatik.ultimate.automata.AutomatonDefinitionPrinter.Format;
+import de.uni_freiburg.informatik.ultimate.automata.nestedword.operations.IsEmptyHeuristic.AStarHeuristic;
+import de.uni_freiburg.informatik.ultimate.automata.petrinet.unfolding.PetriNetUnfolder.EventOrderEnum;
+import de.uni_freiburg.informatik.ultimate.core.model.preferences.IPreferenceProvider;
+import de.uni_freiburg.informatik.ultimate.core.model.services.IUltimateServiceProvider;
+import de.uni_freiburg.informatik.ultimate.icfgtransformer.LoopAccelerators;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.hoaretriple.HoareTripleCheckerUtils.HoareTripleChecks;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.tracecheck.TraceCheckReasonUnknown.RefinementStrategyExceptionBlacklist;
+import de.uni_freiburg.informatik.ultimate.lib.proofs.floydhoare.HoareAnnotationPositions;
+import de.uni_freiburg.informatik.ultimate.lib.proofs.floydhoare.HoareProofSettings;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.SmtUtils.SimplificationTechnique;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SMTFeatureExtractionTermClassifier.ScoringMethod;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder.ExternalSolver;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder.SolverMode;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.PartialOrderMode;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.PartialOrderReductionFacade.OrderType;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings.AbstractionType;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings.IndependenceType;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.SemanticIndependenceRelation.IndependenceConditions;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.singletracecheck.InterpolationTechnique;
+import de.uni_freiburg.informatik.ultimate.logic.Logics;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.rcfgbuilder.preferences.RcfgPreferenceInitializer;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.Activator;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.CoinflipMode;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.FloydHoareAutomataReuse;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.FloydHoareAutomataReuseEnhancement;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.InterpolantAutomaton;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.McrInterpolantMethod;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.Minimization;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.OrderOfErrorLocations;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.RefinementStrategy;
+import de.uni_freiburg.informatik.ultimate.util.ReflectionUtil.Reflected;
+
+public final class TAPreferences {
+	private static final boolean SEPARATE_VIOLATION_CHECK = true;
+	private final boolean mInterprocedural;
+	private final int mMaxIterations;
+	private final int mWatchIteration;
+	private final Artifact mArtifact;
+	private final InterpolationTechnique mInterpolation;
+	private final InterpolantAutomaton mInterpolantAutomaton;
+	private final boolean mDumpAutomata;
+	private final Format mAutomataFormat;
+	private final String mDumpPath;
+	private final InterpolantAutomatonEnhancement mDeterminiation;
+	private final Minimization mMinimize;
+	private final Concurrency mAutomataTypeConcurrency;
+	private final HoareTripleChecks mHoareTripleChecks;
+	@Reflected(excluded = true)
+	private final IPreferenceProvider mPrefs;
+	private final HoareAnnotationPositions mHoareAnnotationPositions;
+	private final boolean mDumpOnlyReuseAutomata;
+	private final int mLimitTraceHistogram;
+	private final int mErrorLocTimeLimit;
+	private final int mLimitPathProgramCount;
+	private final boolean mCollectInterpolantStatistics;
+	private final boolean mHeuristicEmptinessCheck;
+	private final AStarHeuristic mHeuristicEmptinessCheckAStarHeuristic;
+	private final Integer mHeuristicEmptinessCheckAStarHeuristicRandomSeed;
+	private final ScoringMethod mHeuristicEmptinessCheckSmtFeatureScoringMethod;
+	private final boolean mSMTFeatureExtraction;
+	private final String mSMTFeatureExtractionDumpPath;
+	private final boolean mOverrideInterpolantAutomaton;
+	private final McrInterpolantMethod mMcrInterpolantMethod;
+
+	private final IndependenceSettings[] mPorIndependenceSettings;
+	private final IndependenceSettings mLbeIndependenceSettings;
+
+	public enum Artifact {
+		ABSTRACTION, INTERPOLANT_AUTOMATON, NEG_INTERPOLANT_AUTOMATON, RCFG
+	}
+
+	public enum InterpolantAutomatonEnhancement {
+		NONE, EAGER, EAGER_CONSERVATIVE, NO_SECOND_CHANCE, PREDICATE_ABSTRACTION, PREDICATE_ABSTRACTION_CONSERVATIVE,
+		PREDICATE_ABSTRACTION_CANNIBALIZE,
+	}
+
+	public enum Concurrency {
+		FINITE_AUTOMATA, PETRI_NET, PARTIAL_ORDER_FA
+	}
+
+	public enum LooperCheck {
+		SYNTACTIC, SEMANTIC
+	}
+
+	public TAPreferences(final IUltimateServiceProvider services) {
+
+		mPrefs = services.getPreferenceProvider(Activator.PLUGIN_ID);
+
+		mInterprocedural = mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_INTERPROCEDURAL);
+
+		mMaxIterations = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_USERLIMIT_ITERATIONS);
+		mWatchIteration = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_WATCHITERATION);
+
+		mArtifact = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_ARTIFACT, Artifact.class);
+
+		mHoareAnnotationPositions = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_HOARE_POSITIONS,
+				HoareAnnotationPositions.class);
+
+		mInterpolation = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_INTERPOLATED_LOCS,
+				InterpolationTechnique.class);
+
+		mInterpolantAutomaton = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_INTERPOLANT_AUTOMATON,
+				InterpolantAutomaton.class);
+
+		mDumpAutomata = mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_DUMPAUTOMATA);
+
+		mAutomataFormat = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_AUTOMATAFORMAT, Format.class);
+
+		mDumpPath = mPrefs.getString(TraceAbstractionWithHLPreferenceInitializer.LABEL_DUMPPATH);
+		mDumpOnlyReuseAutomata = mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_DUMP_ONLY_REUSE);
+
+		mDeterminiation = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_INTERPOLANT_AUTOMATON_ENHANCEMENT,
+				InterpolantAutomatonEnhancement.class);
+
+		mHoareTripleChecks = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_HOARE_TRIPLE_CHECKS,
+				HoareTripleChecks.class);
+
+		mMinimize = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_MINIMIZE, Minimization.class);
+
+		mAutomataTypeConcurrency =
+				mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_CONCURRENCY, Concurrency.class);
+
+		mLimitTraceHistogram = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_USERLIMIT_TRACE_HISTOGRAM);
+		mErrorLocTimeLimit = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_USERLIMIT_TIME);
+		mLimitPathProgramCount = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_USERLIMIT_PATH_PROGRAM);
+
+		mCollectInterpolantStatistics =
+				mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_COMPUTE_INTERPOLANT_SEQUENCE_STATISTICS);
+
+		if (artifact() == Artifact.NEG_INTERPOLANT_AUTOMATON) {
+			throw new IllegalArgumentException(
+					"Show negated interpolant" + "automaton not possible when using difference.");
+		}
+
+		if (mWatchIteration == 0
+				&& (artifact() == Artifact.NEG_INTERPOLANT_AUTOMATON || artifact() == Artifact.INTERPOLANT_AUTOMATON)) {
+			throw new IllegalArgumentException("There is no interpolant" + "automaton in iteration 0.");
+		}
+
+		mHeuristicEmptinessCheck =
+				mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_HEURISTIC_EMPTINESS_CHECK);
+
+		mHeuristicEmptinessCheckAStarHeuristic =
+				mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_HEURISTIC_EMPTINESS_CHECK_ASTAR_HEURISTIC,
+						AStarHeuristic.class);
+
+		mHeuristicEmptinessCheckSmtFeatureScoringMethod =
+				mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_HEURISTIC_EMPTINESS_CHECK_SCORING_METHOD,
+						ScoringMethod.class);
+
+		mHeuristicEmptinessCheckAStarHeuristicRandomSeed = mPrefs.getInt(
+				TraceAbstractionWithHLPreferenceInitializer.LABEL_HEURISTIC_EMPTINESS_CHECK_ASTAR_RANDOM_HEURISTIC_SEED);
+
+		mSMTFeatureExtraction = mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_SMT_FEATURE_EXTRACTION);
+		mSMTFeatureExtractionDumpPath =
+				mPrefs.getString(TraceAbstractionWithHLPreferenceInitializer.LABEL_SMT_FEATURE_EXTRACTION_DUMP_PATH);
+		mOverrideInterpolantAutomaton =
+				mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_OVERRIDE_INTERPOLANT_AUTOMATON);
+		mMcrInterpolantMethod = mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_MCR_INTERPOLANT_METHOD,
+				McrInterpolantMethod.class);
+
+		mPorIndependenceSettings = new IndependenceSettings[getNumberOfIndependenceRelations()];
+		mLbeIndependenceSettings = new IndependenceSettings(
+				mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_INDEPENDENCE_PLBE, IndependenceType.class),
+				AbstractionType.NONE /* currently hard-coded; will be changed for repeated Petri net LBE */,
+				false /* currently hard-coded; will be changed for repeated Petri net LBE */,
+				mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_SEMICOMM_PLBE),
+				IndependenceSettings.DEFAULT_SOLVER /* currently ignored; not exposed as setting */,
+				IndependenceSettings.DEFAULT_SOLVER_TIMEOUT /* currently ignored; not exposed as setting */);
+	}
+
+	/**
+	 * @return The interprocedural.
+	 */
+	public boolean interprocedural() {
+		return mInterprocedural;
+	}
+
+	public boolean stopAfterFirstViolation() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_STOP_AFTER_FIRST_VIOLATION);
+	}
+
+	public OrderOfErrorLocations getOrderOfErrorLocations() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_ORDER_OF_ERROR_LOCATIONS,
+				OrderOfErrorLocations.class);
+	}
+
+	public boolean readInitialProof() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_READ_INITIAL_PROOF_ASSERTIONS_FROM_FILE);
+	}
+
+	public FloydHoareAutomataReuse getFloydHoareAutomataReuse() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_FLOYD_HOARE_AUTOMATA_REUSE,
+				FloydHoareAutomataReuse.class);
+	}
+
+	public FloydHoareAutomataReuseEnhancement getFloydHoareAutomataReuseEnhancement() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_FLOYD_HOARE_AUTOMATA_REUSE_ENHANCEMENT,
+				FloydHoareAutomataReuseEnhancement.class);
+	}
+
+	public SolverMode solverMode() {
+		return mPrefs.getEnum(RcfgPreferenceInitializer.LABEL_SOLVER, SolverMode.class);
+	}
+
+	public String commandExternalSolver() {
+		return mPrefs.getString(RcfgPreferenceInitializer.LABEL_EXT_SOLVER_COMMAND);
+	}
+
+	public Logics logicForExternalSolver() {
+		return Logics.valueOf(mPrefs.getString(RcfgPreferenceInitializer.LABEL_EXT_SOLVER_LOGIC));
+	}
+
+	public boolean dumpSmtScriptToFile() {
+		return mPrefs.getBoolean(RcfgPreferenceInitializer.LABEL_DUMP_TO_FILE);
+	}
+
+	public boolean compressDumpedSmtScript() {
+		return mPrefs.getBoolean(RcfgPreferenceInitializer.LABEL_COMPRESS_SMT_DUMP_FILE);
+	}
+
+	public String pathOfDumpedScript() {
+		return mPrefs.getString(RcfgPreferenceInitializer.LABEL_DUMP_PATH);
+	}
+
+	/**
+	 * @return The maxIterations.
+	 */
+	public int maxIterations() {
+		return mMaxIterations;
+	}
+
+	/**
+	 * @return The prefObservedIteration.
+	 */
+	public int watchIteration() {
+		return mWatchIteration;
+	}
+
+	/**
+	 * @return The artifact.
+	 */
+	public Artifact artifact() {
+		return mArtifact;
+	}
+
+	public boolean useSeparateSolverForTracechecks() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_SEPARATE_SOLVER);
+	}
+
+	/**
+	 * @return The interpolation technique.
+	 */
+	public InterpolationTechnique interpolation() {
+		return mInterpolation;
+	}
+
+	/**
+	 * @return The interpolant automaton.
+	 */
+	public InterpolantAutomaton interpolantAutomaton() {
+		return mInterpolantAutomaton;
+	}
+
+	/**
+	 * @return The dump automata flag.
+	 */
+	public boolean dumpAutomata() {
+		return mDumpAutomata && !mDumpOnlyReuseAutomata;
+	}
+
+	public Format getAutomataFormat() {
+		return mAutomataFormat;
+	}
+
+	/**
+	 * @return The dump path.
+	 */
+	public String dumpPath() {
+		return mDumpPath;
+	}
+
+	public boolean dumpOnlyReuseAutomata() {
+		return mDumpAutomata && mDumpOnlyReuseAutomata;
+	}
+
+	/**
+	 * @return The determinization.
+	 */
+	public InterpolantAutomatonEnhancement interpolantAutomatonEnhancement() {
+		return mDeterminiation;
+	}
+
+	public HoareTripleChecks getHoareTripleChecks() {
+		return mHoareTripleChecks;
+	}
+
+	/**
+	 * @return The difference.
+	 */
+	public boolean differenceSenwa() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_DIFFERENCE_SENWA);
+	}
+
+	/**
+	 * @return The minimization.
+	 */
+	public Minimization getMinimization() {
+		return mMinimize;
+	}
+
+	public Concurrency getAutomataTypeConcurrency() {
+		return mAutomataTypeConcurrency;
+	}
+
+	public HoareAnnotationPositions getHoareAnnotationPositions() {
+		return mHoareAnnotationPositions;
+	}
+
+	public boolean computeProcedureContracts() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_COMPUTE_PROCEDURE_CONTRACTS);
+	}
+
+	public static boolean separateViolationCheck() {
+		return SEPARATE_VIOLATION_CHECK;
+	}
+
+	public boolean cutOffRequiresSameTransition() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_CUTOFF);
+	}
+
+	public boolean unfoldingToNet() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_BACKFOLDING);
+	}
+
+	public EventOrderEnum eventOrder() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_CONFIGURATION_ORDER, EventOrderEnum.class);
+	}
+
+	public LooperCheck looperCheck() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_LOOPER_CHECK_PETRI, LooperCheck.class);
+	}
+
+	public boolean applyOneShotLbe() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_PETRI_LBE_ONESHOT);
+	}
+
+	public boolean applyOneShotPOR() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_ONESHOT);
+	}
+
+	public PartialOrderMode getPartialOrderMode() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_MODE, PartialOrderMode.class);
+	}
+
+	public boolean dumpIndependenceScript() {
+		return mPrefs.getBoolean(TraceAbstractionWithHLPreferenceInitializer.LABEL_DUMP_INDEPENDENCE_SCRIPT);
+	}
+
+	public String independenceScriptDumpPath() {
+		return mPrefs.getString(TraceAbstractionWithHLPreferenceInitializer.LABEL_INDEPENDENCE_SCRIPT_DUMP_PATH);
+	}
+
+	public OrderType getDfsOrderType() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_DFS_ORDER, OrderType.class);
+	}
+
+	public long getDfsOrderSeed() {
+		return mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_DFS_RANDOM_SEED);
+	}
+
+	public CoinflipMode useCoinflip() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_COINFLIP_MODE, CoinflipMode.class);
+	}
+
+	public double getCoinflipProbability(final int iteration) {
+		final int basicProbability = mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_COINFLIP_PROB);
+		final int probabilityIncrement =
+				mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_COINFLIP_INCREMENT);
+		final int probability = Integer.min(100, basicProbability + iteration * probabilityIncrement);
+		return probability / 100.0D;
+	}
+
+	public int coinflipSeed() {
+		return mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_COINFLIP_SEED);
+	}
+
+	public int getNumberOfIndependenceRelations() {
+		return mPrefs.getInt(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_NUM_INDEPENDENCE);
+	}
+
+	public IndependenceSettings porIndependenceSettings(final int index) {
+		if (index < 0 || index >= getNumberOfIndependenceRelations()) {
+			throw new IllegalArgumentException(
+					"Index out of range: " + index + " not between 0 and " + getNumberOfIndependenceRelations());
+		}
+		if (mPorIndependenceSettings[index] == null) {
+			mPorIndependenceSettings[index] = new IndependenceSettings(
+					mPrefs.getEnum(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_INDEPENDENCE_POR, index),
+							IndependenceSettings.DEFAULT_INDEPENDENCE_TYPE, IndependenceType.class),
+					mPrefs.getEnum(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_POR_ABSTRACTION, index),
+							IndependenceSettings.DEFAULT_ABSTRACTION_TYPE, AbstractionType.class),
+					mPrefs.getBoolean(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_COND_POR, index),
+							IndependenceSettings.DEFAULT_USE_CONDITIONAL),
+					mPrefs.getBoolean(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_SEMICOMM_POR, index),
+							IndependenceSettings.DEFAULT_USE_SEMICOMMUTATIVITY),
+					mPrefs.getEnum(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_INDEPENDENCE_SOLVER_POR, index),
+							IndependenceSettings.DEFAULT_SOLVER, ExternalSolver.class),
+					mPrefs.getLong(getLabel(TraceAbstractionWithHLPreferenceInitializer.LABEL_INDEPENDENCE_SOLVER_TIMEOUT_POR,
+							index), IndependenceSettings.DEFAULT_SOLVER_TIMEOUT));
+		}
+		return mPorIndependenceSettings[index];
+	}
+
+	private static String getLabel(final String label, final int index) {
+		return TraceAbstractionWithHLPreferenceInitializer.getSuffixedLabel(label, index);
+	}
+
+	public IndependenceSettings lbeIndependenceSettings() {
+		return mLbeIndependenceSettings;
+	}
+
+	public SimplificationTechnique getSimplificationTechnique() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_SIMPLIFICATION_TECHNIQUE,
+				SimplificationTechnique.class);
+	}
+
+	public boolean fakeNonIncrementalSolver() {
+		return mPrefs.getBoolean(RcfgPreferenceInitializer.LABEL_FAKE_NON_INCREMENTAL_SCRIPT);
+	}
+
+	public RefinementStrategy getRefinementStrategy() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_REFINEMENT_STRATEGY,
+				RefinementStrategy.class);
+	}
+
+	public RefinementStrategy getMcrRefinementStrategy() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_MCR_REFINEMENT_STRATEGY,
+				RefinementStrategy.class);
+	}
+
+	public RefinementStrategy getAcceleratedInterpolationRefinementStrategy() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_ACIP_REFINEMENT_STRATEGY,
+				RefinementStrategy.class);
+	}
+
+	public RefinementStrategyExceptionBlacklist getRefinementStrategyExceptionSpecification() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_REFINEMENT_STRATEGY_EXCEPTION_BLACKLIST,
+				RefinementStrategyExceptionBlacklist.class);
+	}
+
+	public boolean hasLimitTraceHistogram() {
+		return getLimitTraceHistogram() > 0;
+	}
+
+	public int getLimitTraceHistogram() {
+		return mLimitTraceHistogram;
+	}
+
+	public boolean hasErrorLocTimeLimit() {
+		return mErrorLocTimeLimit > 0;
+	}
+
+	public LoopAccelerators getLoopAccelerationTechnique() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_ACCELINTERPOL_LOOPACCELERATION_TECHNIQUE,
+				LoopAccelerators.class);
+	}
+
+	/**
+	 * @return A positive integer that specifies a time limit in seconds for the analysis of an error location or zero
+	 *         if no limit is set.
+	 */
+	public int getErrorLocTimeLimit() {
+		return mErrorLocTimeLimit;
+	}
+
+	public boolean hasLimitPathProgramCount() {
+		return mLimitPathProgramCount > 0;
+	}
+
+	public int getLimitPathProgramCount() {
+		return mLimitPathProgramCount;
+	}
+
+	public boolean collectInterpolantStatistics() {
+		return mCollectInterpolantStatistics;
+	}
+
+	public boolean useHeuristicEmptinessCheck() {
+		return mHeuristicEmptinessCheck;
+	}
+
+	public ScoringMethod getHeuristicEmptinessCheckScoringMethod() {
+		return mHeuristicEmptinessCheckSmtFeatureScoringMethod;
+	}
+
+	public AStarHeuristic getHeuristicEmptinessCheckAStarHeuristic() {
+		return mHeuristicEmptinessCheckAStarHeuristic;
+	}
+
+	public Integer getHeuristicEmptinessCheckAStarHeuristicRandomSeed() {
+		return mHeuristicEmptinessCheckAStarHeuristicRandomSeed;
+	}
+
+	public boolean useSMTFeatureExtraction() {
+		return mSMTFeatureExtraction;
+	}
+
+	public String getSMTFeatureExtractionDumpPath() {
+		return mSMTFeatureExtractionDumpPath;
+	}
+
+	public boolean overrideInterpolantAutomaton() {
+		return mOverrideInterpolantAutomaton;
+	}
+
+	public McrInterpolantMethod getMcrInterpolantMethod() {
+		return mMcrInterpolantMethod;
+	}
+
+	public boolean useConditionalCommutativityChecker() {
+		return getSymbolicRelationMode() != IndependenceConditions.NONE;
+	}
+
+	public IndependenceConditions getSymbolicRelationMode() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_COMMUTATIVITY_COND_SYNTHESIS,
+				IndependenceConditions.class);
+	}
+
+	public RefinementStrategy getConditionalCommutativityRefinementStrategy() {
+		return mPrefs.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_COMMUTATIVITY_COND_SYNTHESIS_STRATEGY,
+				RefinementStrategy.class);
+	}
+
+	public HoareProofSettings getHoareSettings() {
+		return new HoareProofSettings(getHoareAnnotationPositions(), getSimplificationTechnique());
+	}
+}

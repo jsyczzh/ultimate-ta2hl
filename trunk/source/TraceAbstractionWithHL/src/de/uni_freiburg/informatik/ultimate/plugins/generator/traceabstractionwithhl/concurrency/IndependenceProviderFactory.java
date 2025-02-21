@@ -1,0 +1,319 @@
+/*
+ * Copyright (C) 2022 Dominik Klumpp (klumpp@informatik.uni-freiburg.de)
+ * Copyright (C) 2022 University of Freiburg
+ *
+ * This file is part of the ULTIMATE TraceAbstraction plug-in.
+ *
+ * The ULTIMATE TraceAbstraction plug-in is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * The ULTIMATE TraceAbstraction plug-in is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with the ULTIMATE TraceAbstraction plug-in. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Additional permission under GNU GPL version 3 section 7:
+ * If you modify the ULTIMATE TraceAbstraction plug-in, or any covered work, by linking
+ * or combining it with Eclipse RCP (or a modified version of Eclipse RCP),
+ * containing parts covered by the terms of the Eclipse Public License, the
+ * licensors of the ULTIMATE TraceAbstraction plug-in grant you additional permission
+ * to convey the resulting work.
+ */
+package de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.concurrency;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import de.uni_freiburg.informatik.ultimate.automata.nestedword.NestedWordAutomaton;
+import de.uni_freiburg.informatik.ultimate.automata.partialorder.independence.DefaultIndependenceCache;
+import de.uni_freiburg.informatik.ultimate.automata.partialorder.independence.DisjunctiveConditionalIndependenceRelation.IConditionMerger;
+import de.uni_freiburg.informatik.ultimate.automata.partialorder.independence.IIndependenceRelation;
+import de.uni_freiburg.informatik.ultimate.core.model.services.ILogger;
+import de.uni_freiburg.informatik.ultimate.core.model.services.IUltimateServiceProvider;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.CfgSmtToolkit;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.IcfgUtils;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.IIcfg;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.IIcfgTransition;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.IcfgEdgeIterator;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.transitions.TransFormulaUtils;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.variables.IProgramVar;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.PredicateTransferrer;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.TransferrerWithVariableCache;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.BasicPredicateFactory;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.IPredicate;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.PredicateFactory;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.ManagedScript;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder.ExternalSolver;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder.SolverMode;
+import de.uni_freiburg.informatik.ultimate.lib.smtlibutils.solverbuilder.SolverBuilder.SolverSettings;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceBuilder;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings.AbstractionType;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.IndependenceSettings.IndependenceType;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.SemanticConditionEliminator;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.SemanticIndependenceConditionGenerator;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.ICopyActionFactory;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.IRefinableAbstraction;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.RefinableCachedAbstraction;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.SpecificVariableAbstraction;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.SpecificVariableAbstraction.TransFormulaAuxVarEliminator;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TAPreferences;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TAPreferences.InterpolantAutomatonEnhancement;
+import de.uni_freiburg.informatik.ultimate.lib.tracecheckerutils.partialorder.independence.abstraction.VariableAbstraction;
+import de.uni_freiburg.informatik.ultimate.util.Lazy;
+import de.uni_freiburg.informatik.ultimate.util.datastructures.ImmutableList;
+
+/**
+ * Creates {@link IRefinableIndependenceProvider} instances from given settings. This involves setting up
+ * {@link ManagedScript}s, building {@link IRefinableAbstraction}s, and finally constructing the actual
+ * {@link IIndependenceRelation}s.
+ *
+ * @author Dominik Klumpp (klumpp@informatik.uni-freiburg.de)
+ *
+ * @param <L>
+ */
+public class IndependenceProviderFactory<L extends IIcfgTransition<?>> {
+	private static final boolean REDUCE_CONTEXT_PREDICATES = true;
+
+	private final IUltimateServiceProvider mServices;
+	private final ILogger mLogger;
+
+	private final TAPreferences mPref;
+	private final ICopyActionFactory<L> mCopyFactory;
+
+	private ManagedScript mIndependenceScript;
+	private TransferrerWithVariableCache mTransferrer;
+
+	// The toolkit corresponding to mIndepScriptPredicateFactory.
+	// Used to detect whether this field has to be reset.
+	private CfgSmtToolkit mCachedCsToolkit;
+	private BasicPredicateFactory mIndepScriptPredicateFactory;
+
+	private PredicateTransferrer mPredicateTransferrer;
+
+	private final DefaultIndependenceCache<IPredicate, L> mIndependenceCache = new DefaultIndependenceCache<>();
+
+	public IndependenceProviderFactory(final IUltimateServiceProvider services, final TAPreferences pref,
+			final ICopyActionFactory<L> copyFactory) {
+		mServices = services;
+		mLogger = services.getLoggingService().getLogger(IndependenceProviderFactory.class);
+		mPref = pref;
+		mCopyFactory = copyFactory;
+	}
+
+	public List<IRefinableIndependenceProvider<L>> createProviders(final IIcfg<?> icfg,
+			final PredicateFactory predicateFactory) {
+		// We clear cached conditional independence, because the predicate factory changes and thus the previously
+		// cached conditions become meaningless (and potentially harmful, as we should never compare predicates from
+		// different factories).
+		mIndependenceCache.clearConditional();
+
+		final int numIndependenceRelations = mPref.getNumberOfIndependenceRelations();
+		final List<IRefinableIndependenceProvider<L>> independenceProviders = new ArrayList<>(numIndependenceRelations);
+
+		for (int i = 0; i < numIndependenceRelations; ++i) {
+			final IndependenceSettings settings = mPref.porIndependenceSettings(i);
+			mLogger.info("Independence Relation #%d: %s", i + 1, settings);
+
+			final var container = constructIndependenceProvider(icfg, settings, predicateFactory);
+			independenceProviders.add(container);
+		}
+
+		// reset predicate transferrer, as we may be using a different predicate factory next time
+		mPredicateTransferrer = null;
+
+		return independenceProviders;
+	}
+
+	private IRefinableIndependenceProvider<L> constructIndependenceProvider(final IIcfg<?> icfg,
+			final IndependenceSettings settings, final PredicateFactory predicateFactory) {
+		final CfgSmtToolkit csToolkit = icfg.getCfgSmtToolkit();
+		if (settings.getAbstractionType() == AbstractionType.LOOPER) {
+			return new IndependenceProviderForLoopers<>(mServices, csToolkit,
+					new Lazy<>(() -> constructIndependenceScript(settings)), settings.getIndependenceType());
+		}
+
+		// Construct the script used for independence checks.
+		if (mIndependenceScript == null) {
+			// TODO Only construct this if an independence relation actually needs a script!
+			// TODO Independence relations might have different settings for the script!
+			mIndependenceScript = constructIndependenceScript(settings);
+
+			// We need to transfer given transition formulas and condition predicates to mIndependenceScript.
+			mTransferrer =
+					new TransferrerWithVariableCache(csToolkit.getManagedScript().getScript(), mIndependenceScript);
+		}
+
+		// For symbolic independence relations, we need a predicate factory that works on mIndependenceScript.
+		// This factory must however be reset when the csToolkit changes.
+		if (mCachedCsToolkit != csToolkit) {
+			mCachedCsToolkit = csToolkit;
+
+			final var independenceSymbolTable =
+					mTransferrer.transferSymbolTable(csToolkit.getSymbolTable(), csToolkit.getProcedures());
+			mIndepScriptPredicateFactory =
+					new BasicPredicateFactory(mServices, mIndependenceScript, independenceSymbolTable);
+		}
+
+		if (mPredicateTransferrer == null) {
+			// We need to transfer given conditions to the independence script and, for symbolic relations, we need to
+			// transfer back computed independence conditions.
+			mPredicateTransferrer =
+					new PredicateTransferrer(mTransferrer, predicateFactory, mIndepScriptPredicateFactory);
+		}
+
+		if (settings.getAbstractionType() == AbstractionType.NONE) {
+			// Construct the independence relation (without abstraction). It is the responsibility of the independence
+			// relation to transfer any terms (transition formulas and condition predicates) to the independenceScript.
+			final var independence = constructIndependence(settings, false, predicateFactory, mPredicateTransferrer);
+			return new StaticIndependenceProvider<>(independence);
+		}
+
+		// Construct the abstraction function.
+		final var letterAbstraction = constructAbstraction(icfg, settings, mIndependenceScript);
+		final var cachedAbstraction = new RefinableCachedAbstraction<>(letterAbstraction);
+
+		// Construct the independence relation (still without abstraction).
+		// It is the responsibility of the abstraction function to transfer the transition formulas. But we leave it to
+		// the independence relation to transfer conditions.
+		final var independence = constructIndependence(settings, true, predicateFactory, mPredicateTransferrer);
+
+		return new IndependenceProviderWithAbstraction<>(cachedAbstraction, independence);
+	}
+
+	private IIndependenceRelation<IPredicate, L> constructIndependence(final IndependenceSettings settings,
+			final boolean tfsAlreadyTransferred, final PredicateFactory predicateFactory,
+			final PredicateTransferrer predicateTransferrer) {
+		if (settings.getIndependenceType() == IndependenceType.SYNTACTIC) {
+			return IndependenceBuilder.<L, IPredicate> syntactic().cached().threadSeparated().build();
+		}
+		assert settings.getIndependenceType() == IndependenceType.SEMANTIC : "unsupported independence type";
+
+		// Semantic independence forms the base.
+		return IndependenceBuilder
+				.<L> semantic(mServices, mIndependenceScript, settings.useConditional(),
+						!settings.useSemiCommutativity(), mPref.getSymbolicRelationMode(), mIndepScriptPredicateFactory,
+						getGenerator(settings))
+				// Make sure transition formulas and conditions are transferred to independence script.
+				.ifThen(!tfsAlreadyTransferred || settings.useConditional(),
+						b -> b.transferTerms(mTransferrer, predicateTransferrer, mCopyFactory, tfsAlreadyTransferred))
+				// Protect the SMT solver against checks with quantifiers that are unlikely to succeed anyway.
+				.protectAgainstQuantifiers()
+				// Add syntactic independence check (cheaper sufficient condition).
+				.withSyntacticCheck()
+				// Cache independence query results.
+				.cached(mIndependenceCache)
+				// Setup condition optimization (if conditional independence is enabled).
+				// =========================================================================
+				// NOTE: Soundness of the condition elimination here depends on the fact that all inconsistent
+				// predicates are syntactically equal to "false". Here, this is achieved by usage of
+				// #withDisjunctivePredicates: The only predicates we use as conditions are the original interpolants
+				// (i.e., not conjunctions of them), where we assume this constraint holds.
+				.withConditionElimination(PartialOrderCegarLoop::isFalseLiteral)
+				// We ignore "don't care" conditions stemming from the initial program automaton states.
+				.withFilteredConditions(p -> !predicateFactory.isDontCare(p))
+				// We check independence wrt. the interpolants of each CEGAR iteration separately, and consider two
+				// statements as independent if they are independent under the interpolants from some iteration.
+				// For the symbolic relation, we compute the conjunction of all context predicates.
+				.withDisjunctivePredicates(PartialOrderCegarLoop::getConjuncts, ImmutableList::new,
+						getConditionMerger(predicateFactory))
+				// =========================================================================
+				// Never consider letters of the same thread to be independent.
+				.threadSeparated()
+				// Retrieve the constructed relation.
+				.build();
+	}
+
+	private static <L extends IIcfgTransition<?>, C extends Collection<IPredicate>> IConditionMerger<L, IPredicate, C>
+			getConditionMerger(final PredicateFactory predicateFactory) {
+		if (REDUCE_CONTEXT_PREDICATES) {
+			return (ctx, a, b) -> {
+				final var reduced = ctx.stream().filter(p -> SemanticConditionEliminator.isRelevant(p, a)
+						|| SemanticConditionEliminator.isRelevant(p, b)).collect(Collectors.toList());
+				if (reduced.isEmpty()) {
+					return null;
+				}
+				return predicateFactory.and(reduced);
+			};
+		}
+		return (ctx, a, b) -> predicateFactory.and(ctx);
+	}
+
+	private SemanticIndependenceConditionGenerator getGenerator(final IndependenceSettings settings) {
+		if (mPref.getSymbolicRelationMode().requiresConditionGenerator()) {
+			return new SemanticIndependenceConditionGenerator(mServices, mIndependenceScript,
+					mIndepScriptPredicateFactory, !settings.useSemiCommutativity(), true);
+		}
+		return null;
+	}
+
+	private ManagedScript constructIndependenceScript(final IndependenceSettings settings) {
+		SolverSettings solverSettings = SolverBuilder.constructSolverSettings().setDumpSmtScriptToFile(
+				mPref.dumpIndependenceScript(), mPref.independenceScriptDumpPath(), "commutativity", false);
+		if (settings.getSolver() == ExternalSolver.SMTINTERPOL) {
+			solverSettings = solverSettings.setSolverMode(SolverMode.Internal_SMTInterpol)
+					.setSmtInterpolTimeout(settings.getSolverTimeout());
+		} else {
+			solverSettings = solverSettings.setSolverMode(SolverMode.External_DefaultMode)
+					.setUseExternalSolver(settings.getSolver(), settings.getSolverTimeout());
+		}
+
+		// Intentionally do not use CfgSmtToolkit::createFreshManagedScript:
+		// That method transfers all declared constants to the new script, including for auxiliary variables in
+		// transition formulas. This leads to conflicts later when operations on the independence script create new
+		// auxiliary variables they believe to be fresh.
+		// TODO This might cause problems in programs with uninterpreted functions or axioms. Transfer (only) those.
+		return new ManagedScript(mServices,
+				SolverBuilder.buildAndInitializeSolver(mServices, solverSettings, "SemanticIndependence"));
+	}
+
+	private IRefinableAbstraction<NestedWordAutomaton<L, IPredicate>, ?, L> constructAbstraction(final IIcfg<?> icfg,
+			final IndependenceSettings settings, final ManagedScript abstractionScript) {
+		if (settings.getAbstractionType() == AbstractionType.NONE) {
+			return null;
+		}
+
+		final Set<IProgramVar> allVariables = IcfgUtils.collectAllProgramVars(icfg.getCfgSmtToolkit());
+
+		// We eliminate auxiliary variables.
+		// This is useful both for semantic independence (ease the load on the SMT solver),
+		// but even more so for syntactic independence (often allows shrinking the set of "read" variables).
+		final TransFormulaAuxVarEliminator tfEliminator =
+				(ms, fm, av) -> TransFormulaUtils.tryAuxVarEliminationLight(mServices, ms, fm, av);
+
+		switch (settings.getAbstractionType()) {
+		case VARIABLES_GLOBAL:
+			return new VariableAbstraction<>(mCopyFactory, abstractionScript, mTransferrer, tfEliminator, allVariables);
+		case VARIABLES_LOCAL:
+			if (mPref.interpolantAutomatonEnhancement() != InterpolantAutomatonEnhancement.NONE) {
+				throw new UnsupportedOperationException(
+						"specific variable abstraction is only supported with interpolant automaton enhancement NONE");
+			}
+
+			// TODO Should this be replaced with mAbstraction.getAlphabet()?
+			// Note that this would require changes to ThreadBasedPersistentSets, because it also considers
+			// commutativity of forkCurrent and joinCurrent transitions, which are not in the alphabet.
+			final Set<L> allLetters = new IcfgEdgeIterator(icfg).asStream().map(x -> (L) x).collect(Collectors.toSet());
+			return new SpecificVariableAbstraction<>(mCopyFactory, abstractionScript, mTransferrer, tfEliminator,
+					allLetters, allVariables);
+		default:
+			throw new UnsupportedOperationException("Unknown abstraction type: " + settings.getAbstractionType());
+		}
+	}
+
+	public void shutdown() {
+		if (mIndependenceScript != null) {
+			// Shutdown the script
+			mIndependenceScript.getScript().exit();
+		}
+	}
+}
