@@ -39,6 +39,7 @@ import de.uni_freiburg.informatik.ultimate.automata.AutomataOperationCanceledExc
 import de.uni_freiburg.informatik.ultimate.automata.IAutomaton;
 import de.uni_freiburg.informatik.ultimate.automata.nestedword.INestedWordAutomaton;
 import de.uni_freiburg.informatik.ultimate.automata.nestedword.INwaOutgoingLetterAndTransitionProvider;
+import de.uni_freiburg.informatik.ultimate.automata.nestedword.NestedWordAutomataUtils;
 import de.uni_freiburg.informatik.ultimate.automata.petrinet.netdatastructures.BoundedPetriNet;
 import de.uni_freiburg.informatik.ultimate.automata.statefactory.IPetriNet2FiniteAutomatonStateFactory;
 import de.uni_freiburg.informatik.ultimate.core.lib.exceptions.RunningTaskInfo;
@@ -70,8 +71,8 @@ import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwit
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.concurrency.IndependenceProviderFactory;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.concurrency.PartialOrderCegarLoop;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TAPreferences;
-import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TAPreferences.Concurrency;
+import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.FloydHoareAutomataReuse;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.InterpolantAutomaton;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.LanguageOperation;
@@ -85,8 +86,7 @@ import de.uni_freiburg.informatik.ultimate.util.datastructures.relation.Triple;
  * @author Frank Schüssele (schuessf@informatik.uni-freiburg.de)
  * @author Dominik Klumpp (klumpp@informatik.uni-freiburg.de)
  *
- * @param <L>
- *            The type of transitions in programs analyzed by the created CEGAR loops
+ * @param <L> The type of transitions in programs analyzed by the created CEGAR loops
  */
 public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 	private final IUltimateServiceProvider mBaseServices;
@@ -116,18 +116,13 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 	/**
 	 * Creates a new CEGAR loop.
 	 *
-	 * @param services
-	 *            Ultimate services to use. In particular, this may be used to set a timeout.
-	 * @param name
-	 *            An identifier for the CEGAR loop
-	 * @param root
-	 *            The control flow graph of the analyzed program
-	 * @param errorLocs
-	 *            The error locations whose unreachability shall be proven
-	 * @param witnessTransformer
-	 *            An (optional) transformer for the abstraction using the witness
-	 * @param rawFloydHoareAutomataFromFile
-	 *            A list of automata to use if a CEGAR loop with Floyd/Hoare automata reuse is created
+	 * @param services                      Ultimate services to use. In particular, this may be used to set a timeout.
+	 * @param name                          An identifier for the CEGAR loop
+	 * @param root                          The control flow graph of the analyzed program
+	 * @param errorLocs                     The error locations whose unreachability shall be proven
+	 * @param witnessTransformer            An (optional) transformer for the abstraction using the witness
+	 * @param rawFloydHoareAutomataFromFile A list of automata to use if a CEGAR loop with Floyd/Hoare automata reuse is
+	 *                                      created
 	 *
 	 * @return the newly created CEGAR loop
 	 */
@@ -138,13 +133,15 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 		mCegarLoopBenchmark = new CegarLoopStatisticsGenerator();
 
 		final CfgSmtToolkit csToolkit = root.getCfgSmtToolkit();
-		final PredicateFactory predicateFactory =
-				new PredicateFactory(services, csToolkit.getManagedScript(), csToolkit.getSymbolTable());
+		final PredicateFactory predicateFactory = new PredicateFactory(services, csToolkit.getManagedScript(),
+				csToolkit.getSymbolTable());
 
 		final Set<IcfgLocation> hoareAnnotationLocs = mPrefs.getHoareAnnotationPositions().getLocations(root);
-		final PredicateFactoryRefinement stateFactoryForRefinement =
-				new PredicateFactoryRefinement(services, csToolkit.getManagedScript(), predicateFactory,
-						mPrefs.getHoareSettings().computeHoareAnnotation(), hoareAnnotationLocs);
+		mLogger.info("Are we computing Hoare annotations along the Cegar loop? "
+				+ mPrefs.getHoareSettings().computeHoareAnnotation());
+		final PredicateFactoryRefinement stateFactoryForRefinement = new PredicateFactoryRefinement(services,
+				csToolkit.getManagedScript(), predicateFactory, mPrefs.getHoareSettings().computeHoareAnnotation(),
+				hoareAnnotationLocs);
 		final boolean isConcurrent = IcfgUtils.isConcurrent(root);
 
 		// handle CEGAR loops that are not based on finite automata
@@ -165,8 +162,8 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 				requireNoReuse("POR-based analysis");
 				requireNoWitnesses(witnessTransformer, "POR-based analysis");
 				if (mIndependenceProviderFactory == null) {
-					mIndependenceProviderFactory =
-							new IndependenceProviderFactory<>(mBaseServices, mPrefs, mCopyFactory);
+					mIndependenceProviderFactory = new IndependenceProviderFactory<>(mBaseServices, mPrefs,
+							mCopyFactory);
 				}
 				final var poCegar = new PartialOrderCegarLoop<>(name,
 						createPartialOrderAbstraction(services, predicateFactory, stateFactoryForRefinement, root,
@@ -192,18 +189,45 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 				stateFactoryForRefinement, witnessTransformer);
 		final var abstraction = constructInitialAbstraction(triple.getFirst(), root, errorLocs);
 
+		// distinguish finite automaton
+		if (NestedWordAutomataUtils.isFiniteAutomaton(abstraction)) {
+			final var producer = triple.getSecond().get();
+			final var backtranslator = triple.getThird();
+			final var cegar = createFiniteAutomataCegarLoop(services, name, root, predicateFactory, errorLocs,
+					rawFloydHoareAutomataFromFile, stateFactoryForRefinement, witnessTransformer, abstraction,
+					producer);
+			final var proofProducer = producer == null || backtranslator == null ? null
+					: new BacktranslatingProofProducer<>(root, producer, backtranslator);
+			return new Pair<>(cegar, proofProducer);
+		}
+		// end of newly added code
+
 		final var producer = triple.getSecond().get();
 		final var backtranslator = triple.getThird();
-		final var cegar = createFiniteAutomataCegarLoop(services, name, root, predicateFactory, errorLocs,
+		final var cegar = createNwaCegarLoop(services, name, root, predicateFactory, errorLocs,
 				rawFloydHoareAutomataFromFile, stateFactoryForRefinement, witnessTransformer, abstraction, producer);
 		final var proofProducer = producer == null || backtranslator == null ? null
 				: new BacktranslatingProofProducer<>(root, producer, backtranslator);
+
 		return new Pair<>(cegar, proofProducer);
 	}
 
-	private NwaCegarLoop<L> createFiniteAutomataCegarLoop(final IUltimateServiceProvider services,
+	private FiniteAutomataCegarLoop<L> createFiniteAutomataCegarLoop(final IUltimateServiceProvider services,
 			final DebugIdentifier name, final IIcfg<IcfgLocation> root, final PredicateFactory predicateFactory,
 			final Set<IcfgLocation> errorLocs,
+			final List<INestedWordAutomaton<String, String>> rawFloydHoareAutomataFromFile,
+			final PredicateFactoryRefinement stateFactoryForRefinement, final IWitnessTransformer<L> witnessTransformer,
+			final INestedWordAutomaton<L, IPredicate> abstraction, final NwaHoareProofProducer<L> proofProducer) {
+
+//		final LanguageOperation languageOperation = services.getPreferenceProvider(Activator.PLUGIN_ID)
+//				.getEnum(TraceAbstractionWithHLPreferenceInitializer.LABEL_LANGUAGE_OPERATION, LanguageOperation.class);
+		final CfgSmtToolkit csToolkit = root.getCfgSmtToolkit();
+		return new FiniteAutomataCegarLoop<>(name, abstraction, root, csToolkit, predicateFactory, mPrefs, errorLocs,
+				proofProducer, services, mTransitionClazz, stateFactoryForRefinement);
+	}
+
+	private NwaCegarLoop<L> createNwaCegarLoop(final IUltimateServiceProvider services, final DebugIdentifier name,
+			final IIcfg<IcfgLocation> root, final PredicateFactory predicateFactory, final Set<IcfgLocation> errorLocs,
 			final List<INestedWordAutomaton<String, String>> rawFloydHoareAutomataFromFile,
 			final PredicateFactoryRefinement stateFactoryForRefinement, final IWitnessTransformer<L> witnessTransformer,
 			final INestedWordAutomaton<L, IPredicate> abstraction, final NwaHoareProofProducer<L> proofProducer) {
@@ -250,10 +274,10 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 		}
 	}
 
-	private Triple<IInitialAbstractionProvider<L, ? extends INestedWordAutomaton<L, IPredicate>>, Supplier<NwaHoareProofProducer<L>>, Function<IFloydHoareAnnotation<IPredicate>, IFloydHoareAnnotation<IcfgLocation>>>
-			createAutomataAbstractionProvider(final IUltimateServiceProvider services, final boolean isConcurrent,
-					final PredicateFactory predicateFactory, final PredicateFactoryRefinement stateFactory,
-					final IWitnessTransformer<L> witnessTransformer) {
+	private Triple<IInitialAbstractionProvider<L, ? extends INestedWordAutomaton<L, IPredicate>>, Supplier<NwaHoareProofProducer<L>>, Function<IFloydHoareAnnotation<IPredicate>, IFloydHoareAnnotation<IcfgLocation>>> createAutomataAbstractionProvider(
+			final IUltimateServiceProvider services, final boolean isConcurrent,
+			final PredicateFactory predicateFactory, final PredicateFactoryRefinement stateFactory,
+			final IWitnessTransformer<L> witnessTransformer) {
 		if (!isConcurrent) {
 			final var provider = new NwaInitialAbstractionProvider<L>(services, stateFactory, mPrefs.interprocedural(),
 					predicateFactory, mPrefs.getHoareSettings());
@@ -267,8 +291,8 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 
 		final var netProvider = createPetriAbstractionProvider(services, predicateFactory, false);
 		if (!mPrefs.applyOneShotPOR()) {
-			final var provider =
-					new Petri2FiniteAutomatonAbstractionProvider.Eager<>(services, netProvider, stateFactory);
+			final var provider = new Petri2FiniteAutomatonAbstractionProvider.Eager<>(services, netProvider,
+					stateFactory);
 			if (witnessTransformer == null) {
 				return new Triple<>(provider,
 						() -> provider.getProofProducer(predicateFactory, mPrefs.getHoareSettings()), null);
@@ -316,10 +340,9 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 				createPartialOrderAbstractionProvider(services, predicateFactory, stateFactory), icfg, errorLocs);
 	}
 
-	private IInitialAbstractionProvider<L, ? extends INwaOutgoingLetterAndTransitionProvider<L, IPredicate>>
-			createPartialOrderAbstractionProvider(final IUltimateServiceProvider services,
-					final PredicateFactory predicateFactory,
-					final IPetriNet2FiniteAutomatonStateFactory<IPredicate> stateFactory) {
+	private IInitialAbstractionProvider<L, ? extends INwaOutgoingLetterAndTransitionProvider<L, IPredicate>> createPartialOrderAbstractionProvider(
+			final IUltimateServiceProvider services, final PredicateFactory predicateFactory,
+			final IPetriNet2FiniteAutomatonStateFactory<IPredicate> stateFactory) {
 		final var netProvider = createPetriAbstractionProvider(services, predicateFactory, false);
 		return new Petri2FiniteAutomatonAbstractionProvider.Lazy<>(services, netProvider, stateFactory);
 	}
@@ -332,13 +355,13 @@ public class CegarLoopFactory<L extends IIcfgTransition<?>> {
 		try {
 			return provider.getInitialAbstraction(icfg, errorLocs);
 		} catch (final AutomataOperationCanceledException ex) {
-			final RunningTaskInfo runningTaskInfo =
-					new RunningTaskInfo(this.getClass(), "constructing initial abstraction");
+			final RunningTaskInfo runningTaskInfo = new RunningTaskInfo(this.getClass(),
+					"constructing initial abstraction");
 			ex.addRunningTaskInfo(runningTaskInfo);
 			throw new ToolchainExceptionWrapper(Activator.PLUGIN_ID, ex);
 		} catch (final ToolchainCanceledException ex) {
-			final RunningTaskInfo runningTaskInfo =
-					new RunningTaskInfo(this.getClass(), "constructing initial abstraction");
+			final RunningTaskInfo runningTaskInfo = new RunningTaskInfo(this.getClass(),
+					"constructing initial abstraction");
 			ex.addRunningTaskInfo(runningTaskInfo);
 			throw ex;
 		} catch (final AutomataLibraryException e) {

@@ -58,7 +58,6 @@ import de.uni_freiburg.informatik.ultimate.automata.nestedword.operations.IsEmpt
 import de.uni_freiburg.informatik.ultimate.automata.nestedword.operations.IsEmptyHeuristic.IHeuristic;
 import de.uni_freiburg.informatik.ultimate.automata.nestedword.operations.PowersetDeterminizer;
 import de.uni_freiburg.informatik.ultimate.automata.nestedword.operations.oldapi.IOpWithDelayedDeadEndRemoval;
-import de.uni_freiburg.informatik.ultimate.automata.nestedword.senwa.DifferenceSenwa;
 import de.uni_freiburg.informatik.ultimate.core.lib.exceptions.RunningTaskInfo;
 import de.uni_freiburg.informatik.ultimate.core.lib.exceptions.TaskCanceledException;
 import de.uni_freiburg.informatik.ultimate.core.lib.exceptions.TaskCanceledException.UserDefinedLimit;
@@ -107,13 +106,10 @@ import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwit
 import de.uni_freiburg.informatik.ultimate.util.HistogramOfIterable;
 
 /**
- * Subclass of BasicCegarLoop for safety checking based on nested-word automata.
- *
- * @author Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
- * @author Christian Schilling (schillic@informatik.uni-freiburg.de)
- * @author Dominik Klumpp (klumpp@informatik.uni-freiburg.de)
+ * Subclass of BasicCegarLoop for safety checking based on finite automata.
  */
-public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L, INestedWordAutomaton<L, IPredicate>> {
+public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
+		extends BasicCegarLoop<L, INestedWordAutomaton<L, IPredicate>> {
 
 	private enum AutomatonType {
 		FLOYD_HOARE("FloydHoare", "Fh"), ERROR("Error", "Err");
@@ -156,13 +152,43 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 
 	protected final NwaHoareProofProducer<L> mProofUpdater;
 
-	public NwaCegarLoop(final DebugIdentifier name, final INestedWordAutomaton<L, IPredicate> initialAbstraction,
-			final IIcfg<?> rootNode, final CfgSmtToolkit csToolkit, final PredicateFactory predicateFactory,
-			final TAPreferences taPrefs, final Set<? extends IcfgLocation> errorLocs,
-			final NwaHoareProofProducer<L> proofProducer, final IUltimateServiceProvider services,
-			final Class<L> transitionClazz, final PredicateFactoryRefinement stateFactoryForRefinement) {
+	public FiniteAutomataCegarLoop(final DebugIdentifier name,
+			final INestedWordAutomaton<L, IPredicate> initialAbstraction, final IIcfg<?> rootNode,
+			final CfgSmtToolkit csToolkit, final PredicateFactory predicateFactory, final TAPreferences taPrefs,
+			final Set<? extends IcfgLocation> errorLocs, final NwaHoareProofProducer<L> proofProducer,
+			final IUltimateServiceProvider services, final Class<L> transitionClazz,
+			final PredicateFactoryRefinement stateFactoryForRefinement) {
 		super(name, initialAbstraction, rootNode, csToolkit, predicateFactory, taPrefs, errorLocs,
 				proofProducer != null, services, transitionClazz, stateFactoryForRefinement);
+
+		mLogger.warn("The type of initial abstraction automaton is " + initialAbstraction.getClass().getName());
+
+		mLogger.info("The following are states of the initial abstraction automaton:");
+		final var states = initialAbstraction.getStates();
+		for (final var state : states) {
+			mLogger.info(state.getClass().getName());
+			mLogger.info(state.toString());
+		}
+
+		mLogger.info("The following are letters of the initial abstraction automaton:");
+		final var letters = initialAbstraction.getVpAlphabet().getInternalAlphabet();
+		for (final var letter : letters) {
+			mLogger.info(letter.toString());
+//			mLogger.info(tran.getClass().getName());
+		}
+
+		if (initialAbstraction instanceof final NestedWordAutomaton initialAbstractionNwa) {
+			mLogger.info("The following are transitions of the initial abstraction automaton:");
+			final var trans = initialAbstractionNwa.mInternalIn;
+			for (final var state : trans.keySet()) {
+				final Map<L, IPredicate> outgoing = (Map<L, IPredicate>) trans.get(state);
+				for (final var letter : outgoing.keySet()) {
+					mLogger.info(outgoing.get(letter) + " --> " + letter.toString() + " --> " + state.toString());
+				}
+//				mLogger.info(state.toString());
+			}
+		}
+
 		mErrorGeneralizationEngine = new ErrorGeneralizationEngine<>(services);
 		mProofUpdater = proofProducer;
 
@@ -337,19 +363,13 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 			}
 		}
 
-		if (mPref.dumpAutomata()) {
-			final String filename = new SubtaskIterationIdentifier(mTaskIdentifier, getIteration())
-					+ "_RawFloydHoareAutomaton";
-			super.writeAutomatonToFile(mInterpolAutomaton, filename);
-		}
+//		if (mPref.dumpAutomata()) {
+//			final String filename = new SubtaskIterationIdentifier(mTaskIdentifier, getIteration())
+//					+ "_RawFloydHoareAutomaton";
+//			super.writeAutomatonToFile(mInterpolAutomaton, filename);
+//		}
 
 		assert isInterpolantAutomatonOfSingleStateType(mInterpolAutomaton);
-//		if (NON_EA_INDUCTIVITY_CHECK) {
-//			final boolean inductive = checkInterpolantAutomatonInductivity(mInterpolAutomaton);
-//			if (!inductive) {
-//				throw new AssertionError("not inductive");
-//			}
-//		}
 
 		assert accepts(getServices(), mInterpolAutomaton, mCounterexample.getWord(), false)
 				: "Interpolant automaton broken!: " + mCounterexample.getWord() + " not accepted";
@@ -360,6 +380,14 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 		// exceptions if other callers try to lock it. With assertions enabled, the line below causes the ManagedScript
 		// to be unlocked and no exceptions occur.
 		assert checkInterpolantAutomatonInductivity(mInterpolAutomaton);
+
+		// Determinize mInterpolantAutomaton and get mInterpolantAutomatonDeterministic
+
+		// Get location by product with initial abstraction automata and get
+		// NestedWordAutomaton<L,SPredicate>:mInterpolAutomatonWithpp
+
+		// merge into NestedWordAutomaton<L,SPredicate>:mHoareProofAutomaton
+
 	}
 
 	@Override
@@ -403,7 +431,7 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 		computeAutomataDifference(minuend, subtrahend, subtrahendBeforeEnhancement, predicateUnifier,
 				exploitSigmaStarConcatOfIa, htc, enhanceMode, useErrorAutomaton, automatonType);
 
-		mLogger.warn("The type of abstraction automaton is " + mAbstraction.getClass().getName());
+//		mLogger.warn("The type of abstraction automaton is " + mAbstraction.getClass().getName());
 //		mLogger.info("The following are states of the abstraction automaton:");
 //		final var states = mAbstraction.getStates();
 //		for (final var state : states) {
@@ -411,7 +439,7 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 //			mLogger.info(state.toString());
 //		}
 
-		mLogger.info("Difference compuation finished! Now minimization starts!");
+		mLogger.info("Difference computation finished! Now minimization starts!");
 
 		minimizeAbstractionIfEnabled();
 //		mLogger.info("The following are states of the abstraction automaton after minimization:");
@@ -441,14 +469,14 @@ public class NwaCegarLoop<L extends IIcfgTransition<?>> extends BasicCegarLoop<L
 					mPredicateFactoryInterpolantAutomata);
 			IOpWithDelayedDeadEndRemoval<L, IPredicate> diff;
 			try {
-				if (mPref.differenceSenwa()) {
-					diff = new DifferenceSenwa<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement,
-							minuend, subtrahend, psd, false);
-				} else {
-					mLogger.warn("Normal NWA");
-					diff = new Difference<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement,
-							minuend, subtrahend, psd, explointSigmaStarConcatOfIA);
-				}
+//				if (mPref.differenceSenwa()) {
+//					diff = new DifferenceSenwa<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement,
+//							minuend, subtrahend, psd, false);
+//				} else {
+//				mLogger.warn("Normal NWA");
+				diff = new Difference<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement, minuend,
+						subtrahend, psd, explointSigmaStarConcatOfIA);
+//				}
 				mCegarLoopBenchmark.reportInterpolantAutomatonStates(subtrahend.size());
 			} catch (final AutomataOperationCanceledException | ToolchainCanceledException tce) {
 				final RunningTaskInfo runningTaskInfo = executeDifferenceTimeoutActions(minuend, subtrahend,

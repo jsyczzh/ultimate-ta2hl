@@ -91,8 +91,8 @@ public class TraceAbstractionObserver implements IUnmanagedObserver {
 			if (root instanceof WitnessNode) {
 				mLogger.warn(
 						"Found a witness automaton. I will only consider traces that are accepted by the witness automaton");
-				final INestedWordAutomaton<WitnessEdge, WitnessNode> graphMLwitnessAutomaton =
-						new WitnessModelToAutomatonTransformer((WitnessNode) root, mServices).getResult();
+				final INestedWordAutomaton<WitnessEdge, WitnessNode> graphMLwitnessAutomaton = new WitnessModelToAutomatonTransformer(
+						(WitnessNode) root, mServices).getResult();
 				mTransformer = (automaton, predicateFactory) -> WitnessUtils.constructGraphMLWitnessProduct(mServices,
 						automaton, graphMLwitnessAutomaton, predicateFactory, mLogger, Property.NON_REACHABILITY);
 			}
@@ -126,30 +126,33 @@ public class TraceAbstractionObserver implements IUnmanagedObserver {
 			throw new UnsupportedOperationException("TraceAbstraction needs an RCFG");
 		}
 		mLogger.info("Analyzing ICFG " + rcfgRootNode.getIdentifier());
-		final List<INestedWordAutomaton<String, String>> rawFloydHoareAutomataFromFile =
-				constructRawNestedWordAutomata(mAutomataTestFileAsts);
-		final TraceAbstractionStarter<IcfgEdge> tas =
-				new TraceAbstractionStarter<>(mServices, rcfgRootNode, mTransformer, rawFloydHoareAutomataFromFile,
-						() -> new IcfgCompositionFactory(mServices, rcfgRootNode.getCfgSmtToolkit()),
-						new IcfgCopyFactory(mServices, rcfgRootNode.getCfgSmtToolkit()), IcfgEdge.class);
+//		mLogger.info(rcfgRootNode.getVisualizationGraph());
+		final List<INestedWordAutomaton<String, String>> rawFloydHoareAutomataFromFile = constructRawNestedWordAutomata(
+				mAutomataTestFileAsts);
+		mLogger.info(
+				"What is true term? " + rcfgRootNode.getCfgSmtToolkit().getManagedScript().getScript().term("true"));
+		final TraceAbstractionStarter<IcfgEdge> tas = new TraceAbstractionStarter<>(mServices, rcfgRootNode,
+				mTransformer, rawFloydHoareAutomataFromFile,
+				() -> new IcfgCompositionFactory(mServices, rcfgRootNode.getCfgSmtToolkit()),
+				new IcfgCopyFactory(mServices, rcfgRootNode.getCfgSmtToolkit()), IcfgEdge.class);
 		mRootOfNewModel = tas.getRootOfNewModel();
 	}
 
-	private List<INestedWordAutomaton<String, String>>
-			constructRawNestedWordAutomata(final List<AutomataTestFileAST> automataTestFileAsts) {
+	private List<INestedWordAutomaton<String, String>> constructRawNestedWordAutomata(
+			final List<AutomataTestFileAST> automataTestFileAsts) {
 		final List<INestedWordAutomaton<String, String>> result = new ArrayList<>();
 		for (final AutomataTestFileAST automataTestFileAst : automataTestFileAsts) {
-			final List<AutomatonAST> automataDefinitions =
-					automataTestFileAst.getAutomataDefinitions().getListOfAutomataDefinitions();
+			final List<AutomatonAST> automataDefinitions = automataTestFileAst.getAutomataDefinitions()
+					.getListOfAutomataDefinitions();
 			for (final AutomatonAST automatonDefinition : automataDefinitions) {
 				if (automatonDefinition instanceof NestedwordAutomatonAST) {
 					final NestedWordAutomaton<String, String> nwa = AutomataDefinitionInterpreter
 							.constructNestedWordAutomaton((NestedwordAutomatonAST) automatonDefinition, mServices);
 					result.add(nwa);
 				} else if (automatonDefinition instanceof EpsilonNestedwordAutomatonAST) {
-					final EpsilonNestedWordAutomaton<String, String, NestedWordAutomaton<String, String>> nwa =
-							AutomataDefinitionInterpreter.constructEpsilonNestedWordAutomaton(
-									(EpsilonNestedwordAutomatonAST) automatonDefinition, mServices);
+					final EpsilonNestedWordAutomaton<String, String, NestedWordAutomaton<String, String>> nwa = AutomataDefinitionInterpreter
+							.constructEpsilonNestedWordAutomaton((EpsilonNestedwordAutomatonAST) automatonDefinition,
+									mServices);
 					result.add(nwa);
 				} else {
 					throw new UnsupportedOperationException(

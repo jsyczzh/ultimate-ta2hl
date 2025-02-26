@@ -63,10 +63,8 @@ import de.uni_freiburg.informatik.ultimate.util.datastructures.relation.Quin;
  * interface.
  *
  * @author Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
- * @param <LETTER>
- *            letter type
- * @param <STATE>
- *            state type
+ * @param <LETTER> letter type
+ * @param <STATE>  state type
  */
 public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache<LETTER, STATE>
 		implements INestedWordAutomaton<LETTER, STATE> {
@@ -78,7 +76,10 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	/**
 	 * Set of internal transitions PREs x LETTERs x SUCCs stored as map SUCCs -> LETTERs -> PREs.
 	 */
-	private final Map<STATE, Map<LETTER, Set<STATE>>> mInternalIn = new HashMap<>();
+//	private final Map<STATE, Map<LETTER, Set<STATE>>> mInternalIn = new HashMap<>();
+
+	// changed temporarily to public for easy access!
+	public final Map<STATE, Map<LETTER, Set<STATE>>> mInternalIn = new HashMap<>();
 
 	/**
 	 * Set of call transitions PREs x LETTERs x SUCCs stored as map SUCCs -> LETTERs -> PREs.
@@ -224,8 +225,8 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 			final Set<STATE> succs = entry.getValue();
 			if (succs != null) {
 				for (final STATE succ : succs) {
-					final SummaryReturnTransition<LETTER, STATE> srt =
-							new SummaryReturnTransition<>(pred, letter, succ);
+					final SummaryReturnTransition<LETTER, STATE> srt = new SummaryReturnTransition<>(pred, letter,
+							succ);
 					result.add(srt);
 				}
 			}
@@ -235,14 +236,14 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 
 	@Override
 	public Iterable<SummaryReturnTransition<LETTER, STATE>> summarySuccessors(final STATE hier) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				lettersSummary(hier).iterator(), x -> summarySuccessors(hier, x).iterator());
+		return () -> new NestedIteratorNoopConstruction<>(lettersSummary(hier).iterator(),
+				x -> summarySuccessors(hier, x).iterator());
 	}
 
 	@Override
 	public Iterable<IncomingInternalTransition<LETTER, STATE>> internalPredecessors(final STATE succ,
 			final LETTER letter) {
-		return () -> new Iterator<IncomingInternalTransition<LETTER, STATE>>() {
+		return () -> new Iterator<>() {
 			private final Iterator<STATE> mIterator = initialize();
 
 			private Iterator<STATE> initialize() {
@@ -271,13 +272,13 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 
 	@Override
 	public Iterable<IncomingInternalTransition<LETTER, STATE>> internalPredecessors(final STATE succ) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				lettersInternalIncoming(succ).iterator(), x -> internalPredecessors(succ, x).iterator());
+		return () -> new NestedIteratorNoopConstruction<>(lettersInternalIncoming(succ).iterator(),
+				x -> internalPredecessors(succ, x).iterator());
 	}
 
 	@Override
 	public Iterable<IncomingCallTransition<LETTER, STATE>> callPredecessors(final STATE succ, final LETTER letter) {
-		return () -> new Iterator<IncomingCallTransition<LETTER, STATE>>() {
+		return () -> new Iterator<>() {
 			private final Iterator<STATE> mIterator = initialize();
 
 			private Iterator<STATE> initialize() {
@@ -306,14 +307,14 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 
 	@Override
 	public Iterable<IncomingCallTransition<LETTER, STATE>> callPredecessors(final STATE succ) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				lettersCallIncoming(succ).iterator(), x -> callPredecessors(succ, x).iterator());
+		return () -> new NestedIteratorNoopConstruction<>(lettersCallIncoming(succ).iterator(),
+				x -> callPredecessors(succ, x).iterator());
 	}
 
 	@Override
 	public Iterable<IncomingReturnTransition<LETTER, STATE>> returnPredecessors(final STATE succ, final STATE hier,
 			final LETTER letter) {
-		return () -> new Iterator<IncomingReturnTransition<LETTER, STATE>>() {
+		return () -> new Iterator<>() {
 			private final Iterator<STATE> mIterator = initialize();
 
 			private Iterator<STATE> initialize() {
@@ -345,27 +346,25 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 
 	@Override
 	public Iterable<IncomingReturnTransition<LETTER, STATE>> returnPredecessors(final STATE succ, final LETTER letter) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				predReturnHier(succ, letter).iterator(), x -> returnPredecessors(succ, x, letter).iterator());
+		return () -> new NestedIteratorNoopConstruction<>(predReturnHier(succ, letter).iterator(),
+				x -> returnPredecessors(succ, x, letter).iterator());
 	}
 
 	@Override
 	public Iterable<IncomingReturnTransition<LETTER, STATE>> returnPredecessors(final STATE succ) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				lettersReturnIncoming(succ).iterator(), x -> returnPredecessors(succ, x).iterator());
+		return () -> new NestedIteratorNoopConstruction<>(lettersReturnIncoming(succ).iterator(),
+				x -> returnPredecessors(succ, x).iterator());
 	}
 
 	@Override
 	public Iterable<OutgoingReturnTransition<LETTER, STATE>> returnSuccessors(final STATE state, final LETTER letter) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				hierarchicalPredecessorsOutgoing(state, letter).iterator(),
+		return () -> new NestedIteratorNoopConstruction<>(hierarchicalPredecessorsOutgoing(state, letter).iterator(),
 				x -> returnSuccessors(state, x, letter).iterator());
 	}
 
 	@Override
 	public Iterable<OutgoingReturnTransition<LETTER, STATE>> returnSuccessors(final STATE state) {
-		return () -> new NestedIteratorNoopConstruction<>(
-				hierarchicalPredecessorsOutgoing(state).iterator(),
+		return () -> new NestedIteratorNoopConstruction<>(hierarchicalPredecessorsOutgoing(state).iterator(),
 				x -> returnSuccessorsGivenHier(state, x).iterator());
 	}
 
@@ -404,8 +403,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param state
-	 *            A state which is made non-initial.
+	 * @param state A state which is made non-initial.
 	 * @deprecated Do not modify existing automata, construct new automata instead.
 	 */
 	@Deprecated
@@ -414,8 +412,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param state
-	 *            A state which is removed.
+	 * @param state A state which is removed.
 	 */
 	public void removeState(final STATE state) {
 
@@ -700,12 +697,9 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param pred
-	 *            The predecessor state.
-	 * @param letter
-	 *            internal letter
-	 * @param succ
-	 *            successor state
+	 * @param pred   The predecessor state.
+	 * @param letter internal letter
+	 * @param succ   successor state
 	 */
 	@Override
 	public void addInternalTransition(final STATE pred, final LETTER letter, final STATE succ) {
@@ -726,12 +720,9 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param pred
-	 *            The predecessor state.
-	 * @param letter
-	 *            call letter
-	 * @param succ
-	 *            successor state
+	 * @param pred   The predecessor state.
+	 * @param letter call letter
+	 * @param succ   successor state
 	 */
 	@Override
 	public void addCallTransition(final STATE pred, final LETTER letter, final STATE succ) {
@@ -752,14 +743,10 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param pred
-	 *            The linear predecessor state.
-	 * @param hier
-	 *            hierarchical predecessor state
-	 * @param letter
-	 *            return letter
-	 * @param succ
-	 *            successor state
+	 * @param pred   The linear predecessor state.
+	 * @param hier   hierarchical predecessor state
+	 * @param letter return letter
+	 * @param succ   successor state
 	 */
 	@Override
 	public void addReturnTransition(final STATE pred, final STATE hier, final LETTER letter, final STATE succ) {
@@ -848,8 +835,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 
 	/**
 	 * @return An accepting nested run.
-	 * @throws AutomataOperationCanceledException
-	 *             if operation is canceled
+	 * @throws AutomataOperationCanceledException if operation is canceled
 	 * @deprecated do not use this anymore
 	 */
 	@Deprecated
@@ -858,8 +844,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param nwa
-	 *            A nested word automaton.
+	 * @param nwa A nested word automaton.
 	 * @return nested word automaton which represents the concurrent product
 	 */
 	public INestedWordAutomaton<LETTER, STATE> concurrentProduct(final INestedWordAutomaton<LETTER, STATE> nwa) {
@@ -870,8 +855,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param nwa
-	 *            A nested word automaton.
+	 * @param nwa A nested word automaton.
 	 * @return nested word automaton which represents the concurrent product prefix
 	 */
 	public INestedWordAutomaton<LETTER, STATE> concurrentPrefixProduct(final INestedWordAutomaton<LETTER, STATE> nwa) {
@@ -881,8 +865,7 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	}
 
 	/**
-	 * @param state
-	 *            A state.
+	 * @param state A state.
 	 * @return the number of incoming internal transitions
 	 */
 	public int numberOfIncomingInternalTransitions(final STATE state) {
@@ -979,10 +962,8 @@ public class NestedWordAutomaton<LETTER, STATE> extends NestedWordAutomatonCache
 	 * symbols are contained in the alphabets and the all states are contained in the automaton.
 	 * </ul>
 	 *
-	 * @param nestedWord
-	 *            nested word
-	 * @param stateList
-	 *            list of states
+	 * @param nestedWord nested word
+	 * @param stateList  list of states
 	 */
 	public void addTransitions(final NestedWord<LETTER> nestedWord, final List<STATE> stateList) {
 		assert nestedWord.length() + 1 == stateList.size();

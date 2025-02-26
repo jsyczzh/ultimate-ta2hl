@@ -1,22 +1,22 @@
 /*
  * Copyright (C) 2013-2015 Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
  * Copyright (C) 2009-2015 University of Freiburg
- * 
+ *
  * This file is part of the ULTIMATE Automata Library.
- * 
+ *
  * The ULTIMATE Automata Library is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * The ULTIMATE Automata Library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public License
  * along with the ULTIMATE Automata Library. If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Additional permission under GNU GPL version 3 section 7:
  * If you modify the ULTIMATE Automata Library, or any covered work, by linking
  * or combining it with Eclipse RCP (or a modified version of Eclipse RCP),
@@ -48,12 +48,10 @@ import de.uni_freiburg.informatik.ultimate.automata.statefactory.ISinkStateFacto
 
 /**
  * Computes the difference of two nested word automata.
- * 
+ *
  * @author Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
- * @param <LETTER>
- *            letter type
- * @param <STATE>
- *            state type
+ * @param <LETTER> letter type
+ * @param <STATE>  state type
  */
 public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, STATE, INwaInclusionStateFactory<STATE>>
 		implements IOpWithDelayedDeadEndRemoval<LETTER, STATE> {
@@ -96,17 +94,12 @@ public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, 
 
 	/**
 	 * Uses a PowersetDeterminizer.
-	 * 
-	 * @param services
-	 *            Ultimate services
-	 * @param stateFactory
-	 *            state factory for powerset determinizer and intersection
-	 * @param fstOperand
-	 *            first operand
-	 * @param sndOperand
-	 *            second operand
-	 * @throws AutomataLibraryException
-	 *             if construction fails
+	 *
+	 * @param services     Ultimate services
+	 * @param stateFactory state factory for powerset determinizer and intersection
+	 * @param fstOperand   first operand
+	 * @param sndOperand   second operand
+	 * @throws AutomataLibraryException if construction fails
 	 */
 	public Difference(final AutomataLibraryServices services, final INwaInclusionStateFactory<STATE> stateFactory,
 			final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> fstOperand,
@@ -120,21 +113,21 @@ public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, 
 		return "Finished " + getOperationName() + " Result " + mResult.sizeInformation();
 	}
 
-	private <SF extends IIntersectionStateFactory<STATE> & IEmptyStackStateFactory<STATE>> void
-			computeDifference(final SF stateFactory, final boolean finalIsTrap) throws AutomataLibraryException {
+	private <SF extends IIntersectionStateFactory<STATE> & IEmptyStackStateFactory<STATE>> void computeDifference(
+			final SF stateFactory, final boolean finalIsTrap) throws AutomataLibraryException {
 		if (hasSeveralInitialStates(mSndOperand)) {
 			if (mLogger.isInfoEnabled()) {
 				mLogger.info("Subtrahend was not deterministic. Computing result with determinization.");
 			}
 		} else if (mStateDeterminizer instanceof PowersetDeterminizer) {
 			final TotalizeNwa<LETTER, STATE> sndTotalized = new TotalizeNwa<>(mSndOperand, mStateFactory, true);
-			
-			final ComplementDeterministicNwa<LETTER, STATE> sndComplemented =
-					new ComplementDeterministicNwa<>(sndTotalized);
-			final IntersectNwa<LETTER, STATE> intersect =
-					new IntersectNwa<>(mFstOperand, sndComplemented, stateFactory, finalIsTrap);
-			final NestedWordAutomatonReachableStates<LETTER, STATE> result =
-					new NestedWordAutomatonReachableStates<>(mServices, intersect);
+
+			final ComplementDeterministicNwa<LETTER, STATE> sndComplemented = new ComplementDeterministicNwa<>(
+					sndTotalized);
+			final IntersectNwa<LETTER, STATE> intersect = new IntersectNwa<>(mFstOperand, sndComplemented, stateFactory,
+					finalIsTrap);
+			final NestedWordAutomatonReachableStates<LETTER, STATE> result = new NestedWordAutomatonReachableStates<>(
+					mServices, intersect);
 			if (!sndTotalized.nonDeterminismInInputDetected()) {
 				mSndComplemented = sndComplemented;
 				mIntersect = intersect;
@@ -153,6 +146,14 @@ public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, 
 		final boolean makeAutomatonTotal = true;
 		mSndDeterminized = new DeterminizeNwa<>(mServices, mSndOperand, mStateDeterminizer, mStateFactory, null,
 				makeAutomatonTotal);
+
+		// added for accessing the determinization results
+//		final var mSndDeterminizedAutomaton = mSndDeterminized.getAutomaton();
+//		mLogger.warn(mSndDeterminizedAutomaton.getClass().getName());
+//		mLogger.warn("The following are states of the determinized interpolant automaton:");
+//		final var states = mSndDeterminizedAutomaton.getStates();
+//		mLogger.warn(states.size());
+
 		mSndComplemented = new ComplementDeterministicNwa<>(mSndDeterminized);
 		mIntersect = new IntersectNwa<>(mFstOperand, mSndComplemented, stateFactory, finalIsTrap);
 		mResult = new NestedWordAutomatonReachableStates<>(mServices, mIntersect);
@@ -178,10 +179,10 @@ public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, 
 	public INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> getSecondOperand() {
 		return mSndOperand;
 	}
-	
+
 	public INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> getSecondComplemented() {
 		return mSndComplemented;
-	} 
+	}
 
 	@Override
 	public IDoubleDeckerAutomaton<LETTER, STATE> getResult() {
@@ -196,15 +197,15 @@ public final class Difference<LETTER, STATE> extends BinaryNwaOperation<LETTER, 
 		if (mLogger.isInfoEnabled()) {
 			mLogger.info("Start testing correctness of " + getOperationName());
 		}
-		final INestedWordAutomaton<LETTER, STATE> fstUnreach = new RemoveUnreachable<>(mServices, mFstOperand).getResult();
-		final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> resultDd =
-				(new DifferenceDD<>(mServices, stateFactory, fstUnreach, mSndOperand,
-						new PowersetDeterminizer<>(mSndOperand, true, stateFactory), false, false)).getResult();
+		final INestedWordAutomaton<LETTER, STATE> fstUnreach = new RemoveUnreachable<>(mServices, mFstOperand)
+				.getResult();
+		final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> resultDd = (new DifferenceDD<>(mServices,
+				stateFactory, fstUnreach, mSndOperand, new PowersetDeterminizer<>(mSndOperand, true, stateFactory),
+				false, false)).getResult();
 		boolean correct = true;
 		/*
-		correct &= (resultDd.size() == mResult.size());
-		assert correct;
-		*/
+		 * correct &= (resultDd.size() == mResult.size()); assert correct;
+		 */
 		correct &= new IsEquivalent<>(mServices, stateFactory, resultDd, mResult).getResult();
 		assert correct;
 		if (!correct) {

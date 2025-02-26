@@ -47,10 +47,8 @@ import de.uni_freiburg.informatik.ultimate.automata.statefactory.IStateFactory;
  * On-the-fly determinized nested word automaton.
  *
  * @author Matthias Heizmann (heizmann@informatik.uni-freiburg.de)
- * @param <LETTER>
- *            letter type
- * @param <STATE>
- *            state type
+ * @param <LETTER> letter type
+ * @param <STATE>  state type
  */
 public class DeterminizeNwa<LETTER, STATE> implements INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> {
 	private final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> mOperand;
@@ -66,41 +64,33 @@ public class DeterminizeNwa<LETTER, STATE> implements INwaOutgoingLetterAndTrans
 	/**
 	 * Default constructor.
 	 *
-	 * @param services
-	 *            Ultimate services
-	 * @param operand
-	 *            operand
-	 * @param stateDeterminizer
-	 *            state determinizer
-	 * @param stateFactory
-	 *            state factory
+	 * @param services          Ultimate services
+	 * @param operand           operand
+	 * @param stateDeterminizer state determinizer
+	 * @param stateFactory      state factory
 	 */
 	public DeterminizeNwa(final AutomataLibraryServices services,
 			final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> operand,
-			final IStateDeterminizer<LETTER, STATE> stateDeterminizer, final IEmptyStackStateFactory<STATE> stateFactory) {
+			final IStateDeterminizer<LETTER, STATE> stateDeterminizer,
+			final IEmptyStackStateFactory<STATE> stateFactory) {
 		this(services, operand, stateDeterminizer, stateFactory, null, false);
 	}
 
 	/**
 	 * Extended constructor.
 	 *
-	 * @param services
-	 *            Ultimate services
-	 * @param operand
-	 *            operand
-	 * @param stateDeterminizer
-	 *            state determinizer
-	 * @param stateFactory
-	 *            state factory
-	 * @param predefinedInitials
-	 *            predefined initial states
-	 * @param makeAutomatonTotal
-	 *            make automaton total?
+	 * @param services           Ultimate services
+	 * @param operand            operand
+	 * @param stateDeterminizer  state determinizer
+	 * @param stateFactory       state factory
+	 * @param predefinedInitials predefined initial states
+	 * @param makeAutomatonTotal make automaton total?
 	 */
 	public DeterminizeNwa(final AutomataLibraryServices services,
 			final INwaOutgoingLetterAndTransitionProvider<LETTER, STATE> operand,
-			final IStateDeterminizer<LETTER, STATE> stateDeterminizer, final IEmptyStackStateFactory<STATE> stateFactory,
-			final Set<STATE> predefinedInitials, final boolean makeAutomatonTotal) {
+			final IStateDeterminizer<LETTER, STATE> stateDeterminizer,
+			final IEmptyStackStateFactory<STATE> stateFactory, final Set<STATE> predefinedInitials,
+			final boolean makeAutomatonTotal) {
 		mOperand = operand;
 		mStateDeterminizer = stateDeterminizer;
 		mStateFactory = stateFactory;
@@ -231,8 +221,8 @@ public class DeterminizeNwa<LETTER, STATE> implements INwaOutgoingLetterAndTrans
 	@Override
 	public Iterable<OutgoingInternalTransition<LETTER, STATE>> internalSuccessors(final STATE state,
 			final LETTER letter) {
-		final Iterator<OutgoingInternalTransition<LETTER, STATE>> succs =
-				mCache.internalSuccessors(state, letter).iterator();
+		final Iterator<OutgoingInternalTransition<LETTER, STATE>> succs = mCache.internalSuccessors(state, letter)
+				.iterator();
 		if (!succs.hasNext()) {
 			final DeterminizedState<LETTER, STATE> detState = mRes2det.get(state);
 			assert detState != null;
@@ -275,15 +265,15 @@ public class DeterminizeNwa<LETTER, STATE> implements INwaOutgoingLetterAndTrans
 	@Override
 	public Iterable<OutgoingReturnTransition<LETTER, STATE>> returnSuccessors(final STATE state, final STATE hier,
 			final LETTER letter) {
-		final Iterator<OutgoingReturnTransition<LETTER, STATE>> succs =
-				mCache.returnSuccessors(state, hier, letter).iterator();
+		final Iterator<OutgoingReturnTransition<LETTER, STATE>> succs = mCache.returnSuccessors(state, hier, letter)
+				.iterator();
 		if (!succs.hasNext()) {
 			final DeterminizedState<LETTER, STATE> detState = mRes2det.get(state);
 			assert detState != null;
 			final DeterminizedState<LETTER, STATE> detHier = mRes2det.get(hier);
 			assert detHier != null;
-			final DeterminizedState<LETTER, STATE> detSucc =
-					mStateDeterminizer.returnSuccessor(detState, detHier, letter);
+			final DeterminizedState<LETTER, STATE> detSucc = mStateDeterminizer.returnSuccessor(detState, detHier,
+					letter);
 			final STATE succ = getOrConstructState(detSucc);
 			mCache.addReturnTransition(state, hier, letter, succ);
 		}
