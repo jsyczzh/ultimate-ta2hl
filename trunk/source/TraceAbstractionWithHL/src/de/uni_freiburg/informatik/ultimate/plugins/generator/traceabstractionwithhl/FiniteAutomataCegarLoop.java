@@ -32,9 +32,13 @@ package de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwi
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Queue;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -136,6 +140,11 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 	protected static final int MINIMIZATION_TIMEOUT = 1_000;
 
 	/**
+	 * the new automaton for Hoare Logic proof generation
+	 */
+	protected NestedWordAutomaton<L, IPredicate> mInterpolAutomatonDeterministic;
+
+	/**
 	 * If the trace histogram max is larger than this number we try to find a danger invariant. Only used for debugging.
 	 */
 	private static final int DEBUG_DANGER_INVARIANTS_THRESHOLD = Integer.MAX_VALUE;
@@ -166,7 +175,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 		mLogger.info("The following are states of the initial abstraction automaton:");
 		final var states = initialAbstraction.getStates();
 		for (final var state : states) {
-			mLogger.info(state.getClass().getName());
+//			mLogger.info(state.getClass().getName());
 			mLogger.info(state.toString());
 		}
 
@@ -345,7 +354,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 		mLogger.info("The following are states of the raw interpolant automaton:");
 		final var states = mInterpolAutomaton.getStates();
 		for (final IPredicate state : states) {
-			mLogger.info(state.getClass().getName());
+//			mLogger.info(state.getClass().getName());
 			mLogger.info(state.toString());
 		}
 		mLogger.info("The following are letters of the raw interpolant automaton:");
@@ -363,17 +372,9 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 			}
 		}
 
-//		if (mPref.dumpAutomata()) {
-//			final String filename = new SubtaskIterationIdentifier(mTaskIdentifier, getIteration())
-//					+ "_RawFloydHoareAutomaton";
-//			super.writeAutomatonToFile(mInterpolAutomaton, filename);
-//		}
-
 		assert isInterpolantAutomatonOfSingleStateType(mInterpolAutomaton);
-
 		assert accepts(getServices(), mInterpolAutomaton, mCounterexample.getWord(), false)
 				: "Interpolant automaton broken!: " + mCounterexample.getWord() + " not accepted";
-
 		// FIXME (Dominik 2020-12-19): The assertion below is problematic, because it has side-effects!
 		// In particular, NwaFloydHoareValidityCheck calls IncrementalHoareTripleChecker, which in the method
 		// unAssertCodeBlock unlocks a ManagedScript. If assertions are disabled, this remains locked. This leads to
@@ -382,12 +383,79 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 		assert checkInterpolantAutomatonInductivity(mInterpolAutomaton);
 
 		// Determinize mInterpolantAutomaton and get mInterpolantAutomatonDeterministic
+		determinizeInterpolAutomaton();
+		// dump the states, letters and transitions of the raw interpolant automaton!
+		mLogger.warn("The type of deterministic interpolant automaton is "
+				+ mInterpolAutomatonDeterministic.getClass().getName());
+
+		mLogger.info("The following are states of the deterministic interpolant automaton:");
+		final var deterstates = mInterpolAutomatonDeterministic.getStates();
+		for (final IPredicate state : deterstates) {
+//			mLogger.info(state.getClass().getName());
+			mLogger.info(state.toString());
+		}
+		mLogger.info("The following are letters of the deterministic interpolant automaton:");
+		final var deterletters = mInterpolAutomatonDeterministic.getVpAlphabet().getInternalAlphabet();
+		for (final L letter : deterletters) {
+			mLogger.info(letter.toString());
+		}
+
+		mLogger.info("The following are transitions of the deterministic interpolant automaton:");
+		final var detertrans = mInterpolAutomatonDeterministic.mInternalIn;
+		for (final var state : detertrans.keySet()) {
+			final var origin = detertrans.get(state);
+			for (final var letter : origin.keySet()) {
+				mLogger.info(origin.get(letter) + " --> " + letter.toString() + " --> " + state.toString());
+			}
+		}
 
 		// Get location by product with initial abstraction automata and get
 		// NestedWordAutomaton<L,SPredicate>:mInterpolAutomatonWithpp
 
 		// merge into NestedWordAutomaton<L,SPredicate>:mHoareProofAutomaton
 
+	}
+
+	public void determinizeInterpolAutomaton() {
+		mInterpolAutomatonDeterministic = new NestedWordAutomaton<>(new AutomataLibraryServices(mServices),
+				mInterpolAutomaton.getVpAlphabet(), mPredicateFactoryInterpolantAutomata);
+
+		final Queue<Set<IPredicate>> queue = new LinkedList<>();
+		final Map<Set<IPredicate>, IPredicate> stateMapping = new HashMap<>();
+
+		final Set<IPredicate> startStateSet = new HashSet<>(mInterpolAutomaton.getInitialStates());
+		final IPredicate startPredicateState = mPredicateFactoryInterpolantAutomata
+				.determinizeForFiniteAutomaton(startStateSet);
+		mInterpolAutomatonDeterministic.addState(true,
+				mInterpolAutomaton.getFinalStates().stream().anyMatch(startStateSet::contains), startPredicateState);
+		stateMapping.put(startStateSet, startPredicateState);
+		queue.add(startStateSet);
+
+		while (!queue.isEmpty()) {
+			final Set<IPredicate> currentStateSet = queue.poll();
+			final IPredicate currentStatePredicate = stateMapping.get(currentStateSet);
+
+			for (final L symbol : mInterpolAutomaton.getVpAlphabet().getInternalAlphabet()) {
+				final Set<IPredicate> newStateSet = new HashSet<>();
+				for (final IPredicate state : currentStateSet) {
+					newStateSet.addAll(mInterpolAutomaton.succInternal(state, symbol));
+				}
+				if (!newStateSet.isEmpty()) {
+					if (!stateMapping.containsKey(newStateSet)) {
+						final IPredicate newStatePredicate = mPredicateFactoryInterpolantAutomata
+								.determinizeForFiniteAutomaton(newStateSet);
+						stateMapping.put(newStateSet, newStatePredicate);
+						mInterpolAutomatonDeterministic.addState(false,
+								mInterpolAutomaton.getFinalStates().stream().anyMatch(newStateSet::contains),
+								newStatePredicate);
+						queue.add(newStateSet);
+					}
+					final IPredicate targetStatePredicate = stateMapping.get(newStateSet);
+					mInterpolAutomatonDeterministic.addInternalTransition(currentStatePredicate, symbol,
+							targetStatePredicate);
+				}
+			}
+		}
 	}
 
 	@Override
@@ -473,7 +541,6 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 //					diff = new DifferenceSenwa<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement,
 //							minuend, subtrahend, psd, false);
 //				} else {
-//				mLogger.warn("Normal NWA");
 				diff = new Difference<>(new AutomataLibraryServices(getServices()), mStateFactoryForRefinement, minuend,
 						subtrahend, psd, explointSigmaStarConcatOfIA);
 //				}
@@ -527,6 +594,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 				}
 			}
 			mAbstraction = diff.getResult();
+//			mLogger.warn(mAbstraction.getClass().getName());
 			if (mPref.dumpAutomata()) {
 				final String filename = new SubtaskIterationIdentifier(mTaskIdentifier, getIteration())
 						+ "AbstractionAfterDifferenceAndDeadEndRemoval";

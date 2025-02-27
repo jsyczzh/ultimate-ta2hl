@@ -67,9 +67,8 @@ public class PredicateFactoryForInterpolantAutomata
 	 *
 	 * @param mgdScript
 	 * @param predicateFactory
-	 * @param preserveTerms
-	 *            Whether the factory should preserve the terms for computed predicates. If this is {@code false}, the
-	 *            factory may replace some terms by "don't care".
+	 * @param preserveTerms    Whether the factory should preserve the terms for computed predicates. If this is
+	 *                         {@code false}, the factory may replace some terms by "don't care".
 	 */
 	public PredicateFactoryForInterpolantAutomata(final ManagedScript mgdScript,
 			final PredicateFactory predicateFactory, final boolean preserveTerms) {
@@ -95,6 +94,11 @@ public class PredicateFactoryForInterpolantAutomata
 			return result;
 		}
 		return mPredicateFactory.newDontCarePredicate(null);
+	}
+
+	public IPredicate determinizeForFiniteAutomaton(final Set<IPredicate> states) {
+		final IPredicate result = mPredicateFactory.and(states);
+		return result;
 	}
 
 	@Override
