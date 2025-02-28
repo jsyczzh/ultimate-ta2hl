@@ -96,9 +96,26 @@ public class PredicateFactoryForInterpolantAutomata
 		return mPredicateFactory.newDontCarePredicate(null);
 	}
 
+	/**
+	 * This method is used to determinize a set of states for a finite automaton. The result is a conjunction of the
+	 *
+	 * @param states
+	 * @return
+	 */
 	public IPredicate determinizeForFiniteAutomaton(final Set<IPredicate> states) {
 		final IPredicate result = mPredicateFactory.and(states);
 		return result;
+	}
+
+	/**
+	 * This method creates a predicate with a given program point and a given formula.
+	 *
+	 * @param programPoint
+	 * @param formula
+	 * @return
+	 */
+	public SPredicate createPredicateWithLocation(final IcfgLocation programPoint, final Term formula) {
+		return mPredicateFactory.newSPredicate(programPoint, formula);
 	}
 
 	@Override

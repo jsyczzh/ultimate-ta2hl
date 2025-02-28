@@ -85,6 +85,7 @@ import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.PredicateFactory;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.PredicateUnifier;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.PredicateUtils;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.SPredicate;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.taskidentifier.SubtaskIterationIdentifier;
 import de.uni_freiburg.informatik.ultimate.lib.proofs.floydhoare.HoareAnnotationPositions;
 import de.uni_freiburg.informatik.ultimate.lib.proofs.floydhoare.NwaFloydHoareValidityCheck;
@@ -108,6 +109,7 @@ import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwit
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.Minimization;
 import de.uni_freiburg.informatik.ultimate.plugins.generator.traceabstractionwithhl.preferences.TraceAbstractionWithHLPreferenceInitializer.RelevanceAnalysisMode;
 import de.uni_freiburg.informatik.ultimate.util.HistogramOfIterable;
+import de.uni_freiburg.informatik.ultimate.util.datastructures.relation.Pair;
 
 /**
  * Subclass of BasicCegarLoop for safety checking based on finite automata.
@@ -143,6 +145,16 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 	 * the new automaton for Hoare Logic proof generation
 	 */
 	protected NestedWordAutomaton<L, IPredicate> mInterpolAutomatonDeterministic;
+
+	/**
+	 * the initial abstraction automaton for getting program locations
+	 */
+	protected NestedWordAutomaton<L, SPredicate> mProgramAutomaton;
+
+	/**
+	 * the interpolant automaton with location
+	 */
+	protected NestedWordAutomaton<L, IPredicate> mInterpolAutomatonWithpp;
 
 	/**
 	 * If the trace histogram max is larger than this number we try to find a danger invariant. Only used for debugging.
@@ -187,6 +199,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 		}
 
 		if (initialAbstraction instanceof final NestedWordAutomaton initialAbstractionNwa) {
+			mProgramAutomaton = initialAbstractionNwa;
 			mLogger.info("The following are transitions of the initial abstraction automaton:");
 			final var trans = initialAbstractionNwa.mInternalIn;
 			for (final var state : trans.keySet()) {
@@ -384,7 +397,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 
 		// Determinize mInterpolantAutomaton and get mInterpolantAutomatonDeterministic
 		determinizeInterpolAutomaton();
-		// dump the states, letters and transitions of the raw interpolant automaton!
+		// dump the states, letters and transitions of the deterministics interpolant automaton!
 		mLogger.warn("The type of deterministic interpolant automaton is "
 				+ mInterpolAutomatonDeterministic.getClass().getName());
 
@@ -408,15 +421,84 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 				mLogger.info(origin.get(letter) + " --> " + letter.toString() + " --> " + state.toString());
 			}
 		}
+		assert checkInterpolantAutomatonInductivity(mInterpolAutomatonDeterministic);
 
 		// Get location by product with initial abstraction automata and get
 		// NestedWordAutomaton<L,SPredicate>:mInterpolAutomatonWithpp
+		getProgramLocation();
 
 		// merge into NestedWordAutomaton<L,SPredicate>:mHoareProofAutomaton
 
+		mLogger.info("The following are states of the Hoare proof automaton:");
+
 	}
 
-	public void determinizeInterpolAutomaton() {
+	private void getProgramLocation() {
+//		mLogger.info("The following are states of the program automaton:");
+//		final var states = mProgramAutomaton.getStates();
+//		for (final IPredicate state : states) {
+//			mLogger.info(state.getClass().getName());
+//			mLogger.info(state.toString());
+//		}
+
+		mInterpolAutomatonWithpp = new NestedWordAutomaton<>(new AutomataLibraryServices(mServices),
+				mInterpolAutomaton.getVpAlphabet(), mPredicateFactoryInterpolantAutomata);
+
+		final Queue<Pair<SPredicate, IPredicate>> queue = new LinkedList<>();
+		final Map<Pair<SPredicate, IPredicate>, SPredicate> stateMapping = new HashMap<>();
+
+		// Initialize initial states
+		for (final SPredicate programState : mProgramAutomaton.getInitialStates()) {
+			for (final IPredicate interpolState : mInterpolAutomatonDeterministic.getInitialStates()) {
+				final SPredicate intersectionState = mPredicateFactoryInterpolantAutomata
+						.createPredicateWithLocation(programState.getProgramPoint(), interpolState.getFormula());
+				mInterpolAutomatonWithpp.addState(true, mProgramAutomaton.isFinal(programState)
+						&& mInterpolAutomatonDeterministic.isFinal(interpolState), intersectionState);
+				queue.add(new Pair<>(programState, interpolState));
+				stateMapping.put(new Pair<>(programState, interpolState), intersectionState);
+			}
+		}
+
+		// Transitions
+		while (!queue.isEmpty()) {
+			final Pair<SPredicate, IPredicate> currentPair = queue.poll();
+			final SPredicate currentProgramState = currentPair.getFirst();
+			final IPredicate currentInterpolState = currentPair.getSecond();
+			final SPredicate currentIntersectionState = stateMapping.get(currentPair);
+
+			for (final L symbol : mProgramAutomaton.getVpAlphabet().getInternalAlphabet()) {
+				for (final SPredicate programSucc : mProgramAutomaton.succInternal(currentProgramState, symbol)) {
+					for (final IPredicate interpolSucc : mInterpolAutomatonDeterministic
+							.succInternal(currentInterpolState, symbol)) {
+						final Pair<SPredicate, IPredicate> newPair = new Pair<>(programSucc, interpolSucc);
+						if (!stateMapping.containsKey(newPair)) {
+							final SPredicate newIntersectionState = mPredicateFactoryInterpolantAutomata
+									.createPredicateWithLocation(programSucc.getProgramPoint(),
+											interpolSucc.getFormula());
+							stateMapping.put(newPair, newIntersectionState);
+							mInterpolAutomatonWithpp.addState(false,
+									mProgramAutomaton.isFinal(programSucc)
+											&& mInterpolAutomatonDeterministic.isFinal(interpolSucc),
+									newIntersectionState);
+							queue.add(newPair);
+						}
+						final SPredicate targetState = stateMapping.get(newPair);
+						mInterpolAutomatonWithpp.addInternalTransition(currentIntersectionState, symbol, targetState);
+					}
+				}
+			}
+		}
+		mLogger.info("The following are transitions of the interpolant automaton with program location:");
+		final var trans = mInterpolAutomatonWithpp.mInternalIn;
+		for (final var state : trans.keySet()) {
+			final var origin = trans.get(state);
+			for (final var letter : origin.keySet()) {
+				mLogger.info(origin.get(letter) + " --> " + letter.toString() + " --> " + state.toString());
+			}
+		}
+	}
+
+	private void determinizeInterpolAutomaton() {
 		mInterpolAutomatonDeterministic = new NestedWordAutomaton<>(new AutomataLibraryServices(mServices),
 				mInterpolAutomaton.getVpAlphabet(), mPredicateFactoryInterpolantAutomata);
 
