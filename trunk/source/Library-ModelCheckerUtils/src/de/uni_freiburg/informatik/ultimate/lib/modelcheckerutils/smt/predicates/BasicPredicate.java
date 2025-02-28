@@ -30,6 +30,7 @@ import java.util.Set;
 
 import de.uni_freiburg.informatik.ultimate.core.lib.models.annotation.ModernAnnotations;
 import de.uni_freiburg.informatik.ultimate.core.model.models.annotation.Visualizable;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.IcfgLocation;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.variables.IProgramFunction;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.variables.IProgramVar;
 import de.uni_freiburg.informatik.ultimate.logic.Term;
@@ -63,6 +64,10 @@ public class BasicPredicate extends ModernAnnotations implements IPredicate {
 	@Visualizable
 	public Term getFormula() {
 		return mFormula;
+	}
+
+	public IcfgLocation getProgramPoint() {
+		return null;
 	}
 
 	@Override

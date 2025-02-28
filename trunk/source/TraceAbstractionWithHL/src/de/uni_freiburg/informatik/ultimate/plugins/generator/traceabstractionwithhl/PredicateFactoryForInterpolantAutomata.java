@@ -118,6 +118,14 @@ public class PredicateFactoryForInterpolantAutomata
 		return mPredicateFactory.newSPredicate(programPoint, formula);
 	}
 
+	public SPredicate mergePredicatesForSamepp(final SPredicate fstState, final SPredicate sndState) {
+		final var pp = fstState.getProgramPoint();
+		final var fstPred = mPredicateFactory.newPredicate(fstState.getFormula());
+		final var sndPred = mPredicateFactory.newPredicate(sndState.getFormula());
+		final var conjunction = mPredicateFactory.and(fstPred, sndPred).getFormula();
+		return createPredicateWithLocation(pp, conjunction);
+	}
+
 	@Override
 	public IPredicate createSinkStateContent() {
 		return mPredicateFactory.newPredicate(mMgdScript.getScript().term("true"));

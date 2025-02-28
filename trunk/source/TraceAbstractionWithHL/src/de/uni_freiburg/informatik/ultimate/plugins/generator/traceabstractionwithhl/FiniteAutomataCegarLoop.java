@@ -157,6 +157,10 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 	protected NestedWordAutomaton<L, IPredicate> mInterpolAutomatonWithpp;
 
 	/**
+	 * the Hoare proof automaton
+	 */
+	protected NestedWordAutomaton<L, IPredicate> mHoareProofAutomaton;
+	/**
 	 * If the trace histogram max is larger than this number we try to find a danger invariant. Only used for debugging.
 	 */
 	private static final int DEBUG_DANGER_INVARIANTS_THRESHOLD = Integer.MAX_VALUE;
@@ -218,6 +222,7 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 		mSearchStrategy = getSearchStrategy(prefs);
 		mStoredRawInterpolantAutomata = checkStoreCounterExamples(mPref) ? new ArrayList<>() : null;
 
+		mHoareProofAutomaton = null;
 		// Heuristic Emptiness Check
 		mUseHeuristicEmptinessCheck = taPrefs.useHeuristicEmptinessCheck();
 		mScoringMethod = taPrefs.getHeuristicEmptinessCheckScoringMethod();
@@ -429,8 +434,120 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 
 		// merge into NestedWordAutomaton<L,SPredicate>:mHoareProofAutomaton
 
-		mLogger.info("The following are states of the Hoare proof automaton:");
+		mergeInterpolantAutomatonWithProgramLocation();
 
+		mLogger.warn("The following are states of the deterministic interpolant automaton:");
+		final var proofstates = mHoareProofAutomaton.getStates();
+		for (final IPredicate state : proofstates) {
+//			mLogger.info(state.getClass().getName());
+			mLogger.info(state.toString());
+		}
+	}
+
+	private void mergeInterpolantAutomatonWithProgramLocation() {
+		if (mHoareProofAutomaton == null) {
+			mHoareProofAutomaton = mInterpolAutomatonWithpp;
+		} else {
+			if (mHoareProofAutomaton instanceof final NestedWordAutomaton hoareProofAutomaton
+					&& mInterpolAutomatonWithpp instanceof final NestedWordAutomaton interpolAutomatonWithpp) {
+				final NestedWordAutomaton<L, SPredicate> fst = hoareProofAutomaton;
+				final NestedWordAutomaton<L, SPredicate> snd = interpolAutomatonWithpp;
+				mHoareProofAutomaton = merge(fst, snd);
+			}
+		}
+	}
+
+	private NestedWordAutomaton<L, IPredicate> merge(final NestedWordAutomaton<L, SPredicate> fst,
+			final NestedWordAutomaton<L, SPredicate> snd) {
+		final NestedWordAutomaton<L, IPredicate> mergedAutomaton = new NestedWordAutomaton<>(
+				new AutomataLibraryServices(mServices), mInterpolAutomaton.getVpAlphabet(),
+				mPredicateFactoryInterpolantAutomata);
+//		NestedWordAutomaton<L, SPredicate> mergedAutomaton =
+//	            new NestedWordAutomaton<>(services, fst.getVpAlphabet(), stateFactory);
+
+		final Queue<Pair<SPredicate, SPredicate>> queue = new LinkedList<>();
+		final Map<Pair<SPredicate, SPredicate>, SPredicate> stateMapping = new HashMap<>();
+
+		// Initialize initial states
+		if (fst.getInitialStates().size() != 1 || snd.getInitialStates().size() != 1) {
+			throw new IllegalStateException("Both automata must have exactly one initial state.");
+		}
+
+		final SPredicate fstInitState = fst.getInitialStates().iterator().next();
+		final SPredicate sndInitState = snd.getInitialStates().iterator().next();
+
+		if (!fstInitState.getProgramPoint().equals(sndInitState.getProgramPoint())) {
+			throw new IllegalStateException("Initial states must have the same program point.");
+		}
+
+		final SPredicate mergedInitState = mPredicateFactoryInterpolantAutomata.mergePredicatesForSamepp(fstInitState,
+				sndInitState);
+		mergedAutomaton.addState(true, fst.isFinal(fstInitState) || snd.isFinal(sndInitState), mergedInitState);
+		queue.add(new Pair<>(fstInitState, sndInitState));
+		stateMapping.put(new Pair<>(fstInitState, sndInitState), mergedInitState);
+//		stateMapping.put(new Pair<>(fstInitState, null), mergedInitState);
+
+		// Process transitions
+		while (!queue.isEmpty()) {
+			final Pair<SPredicate, SPredicate> currentPair = queue.poll();
+			final SPredicate currentFstState = currentPair.getFirst();
+			final SPredicate currentSndState = currentPair.getSecond();
+			final SPredicate currentMergedState = stateMapping.get(currentPair);
+
+			for (final L symbol : fst.getVpAlphabet().getInternalAlphabet()) {
+				final Set<SPredicate> fstSuccessors = currentFstState == null ? Collections.emptySet()
+						: fst.succInternal(currentFstState, symbol);
+				final Set<SPredicate> sndSuccessors = currentSndState == null ? Collections.emptySet()
+						: snd.succInternal(currentSndState, symbol);
+
+				if (!fstSuccessors.isEmpty() && !sndSuccessors.isEmpty()) {
+//					mLogger.warn(currentFstState.toString() + " fstSuccessors: " + fstSuccessors);
+					assert fstSuccessors.size() == 1 : "fstSuccessors must be a singleton";
+					assert sndSuccessors.size() == 1 : "sndSuccessors must be a singleton";
+
+					final SPredicate fstSucc = fstSuccessors.iterator().next();
+					final SPredicate sndSucc = sndSuccessors.iterator().next();
+
+					assert fstSucc.getProgramPoint().equals(sndSucc.getProgramPoint()) : "Program points must match";
+
+					final SPredicate newMergedState = mPredicateFactoryInterpolantAutomata
+							.mergePredicatesForSamepp(fstSucc, sndSucc);
+					final Pair<SPredicate, SPredicate> newPair = new Pair<>(fstSucc, sndSucc);
+					if (!stateMapping.containsKey(newPair)) {
+						stateMapping.put(newPair, newMergedState);
+						mergedAutomaton.addState(false, fst.isFinal(fstSucc) || snd.isFinal(sndSucc), newMergedState);
+						queue.add(newPair);
+					}
+					mergedAutomaton.addInternalTransition(currentMergedState, symbol, newMergedState);
+				} else {
+					if (!fstSuccessors.isEmpty()) {
+						assert fstSuccessors.size() == 1 : "fstSuccessors must be a singleton";
+						final SPredicate fstSucc = fstSuccessors.iterator().next();
+						final Pair<SPredicate, SPredicate> newPair = new Pair<>(fstSucc, null);
+						if (!stateMapping.containsKey(newPair)) {
+							stateMapping.put(newPair, fstSucc);
+							mergedAutomaton.addState(false, fst.isFinal(fstSucc), fstSucc);
+							queue.add(newPair);
+						}
+						mergedAutomaton.addInternalTransition(currentMergedState, symbol, fstSucc);
+					} else {
+						if (!sndSuccessors.isEmpty()) {
+							assert sndSuccessors.size() == 1 : "sndSuccessors must be a singleton";
+							final SPredicate sndSucc = sndSuccessors.iterator().next();
+							final Pair<SPredicate, SPredicate> newPair = new Pair<>(null, sndSucc);
+							if (!stateMapping.containsKey(newPair)) {
+								stateMapping.put(newPair, sndSucc);
+								mergedAutomaton.addState(false, snd.isFinal(sndSucc), sndSucc);
+								queue.add(newPair);
+							}
+							mergedAutomaton.addInternalTransition(currentMergedState, symbol, sndSucc);
+						}
+					}
+				}
+			}
+		}
+
+		return mergedAutomaton;
 	}
 
 	private void getProgramLocation() {

@@ -39,4 +39,5 @@ public interface IPredicate extends IAbstractPredicate {
 	Term getFormula();
 
 	Term getClosedFormula();
+
 }
