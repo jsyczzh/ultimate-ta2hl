@@ -78,6 +78,7 @@ import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.I
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.cfg.structure.debugidentifiers.DebugIdentifier;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.hoaretriple.IHoareTripleChecker;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.hoaretriple.IncrementalHoareTripleChecker;
+import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.BasicPredicate;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.IMLPredicate;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.IPredicate;
 import de.uni_freiburg.informatik.ultimate.lib.modelcheckerutils.smt.predicates.IPredicateUnifier;
@@ -436,11 +437,33 @@ public class FiniteAutomataCegarLoop<L extends IIcfgTransition<?>>
 
 		mergeInterpolantAutomatonWithProgramLocation();
 
-		mLogger.warn("The following are states of the deterministic interpolant automaton:");
-		final var proofstates = mHoareProofAutomaton.getStates();
-		for (final IPredicate state : proofstates) {
-//			mLogger.info(state.getClass().getName());
-			mLogger.info(state.toString());
+//		mLogger.warn("The following are states of the final Floyd Hoare automaton:");
+//		final var proofstates = mHoareProofAutomaton.getStates();
+//		for (final IPredicate state : proofstates) {
+//			mLogger.info(state.toString());
+//		}
+
+		final NestedWordAutomaton<L, SPredicate> tmp = (NestedWordAutomaton) mHoareProofAutomaton;
+		final Set<SPredicate> tmpStates = tmp.getStates();
+		final HashMap<IcfgLocation, BasicPredicate> collected = new HashMap<>();
+		for (final SPredicate state : tmpStates) {
+			final BasicPredicate statePred = mPredicateFactory.newPredicate(state.getFormula());
+			mLogger.info(statePred.toString());
+//			mLogger.info(state.toString());
+			final var pp = state.getProgramPoint();
+			if (collected.containsKey(pp)) {
+				final var oldPred = collected.get(pp);
+				final var newPred = (BasicPredicate) mPredicateFactory.or(oldPred, statePred);
+				collected.replace(pp, newPred);
+//				mLogger.warn(newPred.toString());
+			} else {
+				collected.put(pp, statePred);
+			}
+		}
+
+		mLogger.warn("The following are floyd hoare annotations for each location:");
+		for (final var pp : collected.keySet()) {
+			mLogger.info(pp.toString() + " : " + collected.get(pp).toStringWoSerialNumber());
 		}
 	}
 

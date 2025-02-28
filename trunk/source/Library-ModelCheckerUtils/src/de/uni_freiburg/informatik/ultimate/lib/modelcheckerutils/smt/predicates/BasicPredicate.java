@@ -91,6 +91,10 @@ public class BasicPredicate extends ModernAnnotations implements IPredicate {
 		return mSerialNumber + "#" + mFormula.toStringDirect();
 	}
 
+	public String toStringWoSerialNumber() {
+		return mFormula.toStringDirect();
+	}
+
 	@Override
 	public final int hashCode() {
 		return HashUtils.hashJenkins(31, mSerialNumber);
